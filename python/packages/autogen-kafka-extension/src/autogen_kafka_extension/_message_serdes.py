@@ -51,15 +51,15 @@ class EventDeserializer(middleware.BaseMiddleware):
 
             try:
                 # Wrap the parsed data in a Message object
-                if evt_type == Message.__class__.__name__:
+                if evt_type == Message.__name__:
                     # If the event type is Message, create a Message instance
                     values = json.loads(cr.value)
                     cr.value = Message.from_dict(values)
-                elif evt_type == RegistrationMessage.__class__.__name__:
+                elif evt_type == RegistrationMessage.__name__:
                     # If the event type is RegistrationMessage, create a RegistrationMessage instance
                     values = json.loads(cr.value)
                     cr.value = RegistrationMessage.from_dict(values)
-                elif evt_type == CloudEvent.__class__.__name__:
+                elif evt_type == CloudEvent.__name__:
                     cr.value = CloudEvent(attributes=headers, data=cr.value)
             except ValueError as e:
                 logging.error(f"Failed to deserialize value {cr.value} with headers {headers}: {e}")
@@ -108,7 +108,7 @@ class EventSerializer(Serializer):
                     result = value
                 else:
                     logging.warning(f"Non-string header value for {key}: {value}")
-            headers[EVENT_TYPE_ATTR] = CloudEvent.__class__.__name__
+            headers[EVENT_TYPE_ATTR] = CloudEvent.__name__
 
             return result
         elif not isinstance(payload, Message) and not isinstance(payload, RegistrationMessage):

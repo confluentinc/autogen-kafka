@@ -11,7 +11,7 @@ class MessageType(Enum):
     RESPONSE = "response"
     ERROR = "error"
 
-class Message:
+class Message(object):
 
     @property
     def message_type(self) -> MessageType:

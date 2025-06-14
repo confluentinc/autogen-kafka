@@ -69,9 +69,11 @@ async def test_agent_types_must_be_unique_multiple_workers() -> None:
         worker2 = KafkaWorkerAgentRuntime(config=config_2)
         await worker2.start()
 
+        await asyncio.sleep(3)
+
         await worker1.register_factory(type=AgentType("name1"), agent_factory=lambda: NoopAgent(), expected_class=NoopAgent)
 
-        await asyncio.sleep(10)
+        await asyncio.sleep(3)
 
         with pytest.raises(Exception, match="Agent type name1 already registered"):
             await worker2.register_factory(
@@ -97,7 +99,7 @@ async def test_register_receives_publish() -> None:
                                               bootstrap_servers=[connection],
                                               group_id="autogen-group_1",
                                               client_id="autogen-client_1")
-        config_2: WorkerConfig = WorkerConfig(title="KafkaWorker",
+        config_2: WorkerConfig = WorkerConfig(title="KafkaWorker-2",
                                               request_topic="request",
                                               response_topic="response",
                                               registry_topic="communication",
@@ -110,14 +112,18 @@ async def test_register_receives_publish() -> None:
         worker1 = KafkaWorkerAgentRuntime(config=config_1)
         await worker1.start()
 
+        worker2 = KafkaWorkerAgentRuntime(config=config_2)
+        await worker2.start()
+
+        # Let the workers register and discover each other.
+        await asyncio.sleep(3)
+
         worker1.add_message_serializer(try_get_known_serializers_for_type(MessageType))
         await worker1.register_factory(
             type=AgentType("name1"), agent_factory=lambda: LoopbackAgent(), expected_class=LoopbackAgent
         )
         await worker1.add_subscription(TypeSubscription("default", "name1"))
 
-        worker2 = KafkaWorkerAgentRuntime(config=config_2)
-        await worker2.start()
         worker2.add_message_serializer(try_get_known_serializers_for_type(MessageType))
         await worker2.register_factory(
             type=AgentType("name2"), agent_factory=lambda: LoopbackAgent(), expected_class=LoopbackAgent
@@ -128,7 +134,7 @@ async def test_register_receives_publish() -> None:
         await worker1.publish_message(MessageType(), topic_id=TopicId("default", "default"))
 
         # Let the agent run for a bit.
-        await asyncio.sleep(10)
+        await asyncio.sleep(3)
 
         # Agents in default topic source should have received the message.
         worker1_agent = await worker1.try_get_underlying_agent_instance(AgentId("name1", "default"), LoopbackAgent)

@@ -15,13 +15,13 @@ from autogen_core._serialization import SerializationRegistry
 from autogen_core._single_threaded_agent_runtime import type_func_alias
 from autogen_core._telemetry import TraceHelper, MessageRuntimeTracingConfig, get_telemetry_grpc_metadata
 from cloudevents.pydantic import CloudEvent
-from kstreams import create_engine, ConsumerRecord, Stream, Send, middleware, StreamEngine
-from kstreams.backends import Kafka
+from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import _constants
 from autogen_kafka_extension._agent_registry import AgentRegistry
 from autogen_kafka_extension._message import Message, MessageType
+from autogen_kafka_extension._streaming import Streaming
 from autogen_kafka_extension._topic_admin import TopicAdmin
 from autogen_kafka_extension.worker_config import WorkerConfig
 from autogen_kafka_extension._message_serdes import EventDeserializer, EventSerializer
@@ -63,7 +63,6 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         # Runtime state
         self._started: bool = False
         self._config = config
-        self._stream_engine: StreamEngine | None = None
 
         # Agent management
         self._agent_factories: Dict[
@@ -82,7 +81,8 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
-        # self._agent_registry = AgentRegistry(config)
+        self._stream_engine: Streaming | None = None
+        self._agent_registry : AgentRegistry | None = None
 
     async def start(self) -> None:
         """
@@ -90,38 +90,20 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         """
         logger.info("Starting Kafka stream processing engine")
         try:
-            # Make sure all topics exist
-            topics_admin = TopicAdmin(self._config)
-            topics_admin.create_topics([self._config.request_topic,
-                                        self._config.response_topic])
+            self._stream_engine: Streaming = Streaming(self._config)
+            self._agent_registry = AgentRegistry(config=self._config,
+                                                 streaming=self._stream_engine)
 
-            # Start the stream processing engine
-            backend: Kafka = self._config.get_kafka_backend()
-            self._stream_engine = create_engine(
-                backend=backend,
-                title=self._config.title,
-                serializer=EventSerializer()
-            )
-
-            # Create and add a stream for incoming requests
-            stream = Stream(
-                topics=[self._config.request_topic],
+            self._stream_engine.create_topics([self._config.response_topic])
+            self._stream_engine.create_and_add_stream(
                 name=self._config.title,
-                func=self._on_record,
-                middlewares=[middleware.Middleware(EventDeserializer)],
-                config={
-                    "group_id": self._config.group_id,
-                    "client_id": self._config.client_id,
-                    "auto_offset_reset": "earliest",
-                    "enable_auto_commit": True
-                },
-                backend=backend
+                topics=[self._config.request_topic],
+                group_id=self._config.group_id,
+                client_id=self._config.client_id,
+                func=self._on_record
             )
-            self._stream_engine.add_stream(stream)
-            # self._agent_registry.start(self._stream_engine)
 
             await self._stream_engine.start()
-
         except Exception as e:
             logger.error(f"Failed to start Kafka stream engine: {e}")
             raise
@@ -140,8 +122,10 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
                 logger.error("Error in background task", exc_info=task_result)
 
         if self._stream_engine is not None and self._started:
-            await self._stream_engine.stop()
-            # await self._agent_registry.stop()
+            try:
+                await self._stream_engine.stop()
+            except Exception as e:
+                logger.error(f"Failed to stop Kafka stream engine: {e}")
 
     async def send_message(
         self,
@@ -310,8 +294,8 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
 
         if type.type in self._agent_factories:
             raise ValueError(f"Agent with type {type} already exists.")
-        # if self._agent_registry.is_registered(type):
-        #     raise ValueError(f"Agent with id {type} already registered.")
+        if self._agent_registry.is_registered(type):
+            raise ValueError(f"Agent type {type.type} already registered")
 
         async def factory_wrapper() -> T:
             maybe_agent_instance = agent_factory()
@@ -326,7 +310,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             return agent_instance
 
         self._agent_factories[type.type] = factory_wrapper
-        # await self._agent_registry.register_agent(type)
+        await self._agent_registry.register_agent(type)
         return type
 
     async def register_agent_instance(

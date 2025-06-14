@@ -8,7 +8,7 @@ class RegistrationMessageType(Enum):
     REGISTER = "register"
     UNREGISTER = "unregister"
 
-class RegistrationMessage:
+class RegistrationMessage(object):
 
     @property
     def message_type(self) -> RegistrationMessageType:
