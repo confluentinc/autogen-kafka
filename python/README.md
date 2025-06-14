@@ -21,13 +21,27 @@ KafkaWorkerAgentRuntime is a scalable, event-driven runtime for autonomous agent
 
 - Python 3.10+
 - Kafka cluster (local or remote)
-- Required packages installed via pip:
+- Install the required packages using UV:
 
 ```bash
-pip install -r requirements.txt
+uv sync --all-extras
 ```
 
+Make sure to configure your Kafka connection details in the runtime configuration.
+
+### Kafka Setup
+
+Ensure your Kafka cluster is running and accessible. You can run Kafka locally using Docker:
+
+```bash
+docker-compose up -d
+```
+
+Or use a managed Kafka service like Confluent Cloud. Update your Kafka configuration accordingly in the `WorkerConfig`.
+
 ### Example Usage
+
+Here's a simple example to get the runtime started with a basic configuration:
 
 ```python
 from autogen_kafka_extension.worker_config import WorkerConfig
@@ -83,7 +97,7 @@ await runtime.publish_message("Announcement", topic_id=TopicId("event", "broadca
 ## 📦 Development Notes
 
 - Uses `kstreams` for stream abstraction over Kafka
-- Background tasks are tracked and exceptions surfaced
+- Robust background task management with exception tracking
 - Includes CloudEvent deserialization and trace propagation
 - Built with extensibility in mind: plug in your own agents, serializers, and middleware
 
@@ -95,6 +109,7 @@ await runtime.publish_message("Announcement", topic_id=TopicId("event", "broadca
 - [ ] Agent metadata service
 - [ ] Pluggable metrics exporter
 - [ ] Improved CLI for monitoring and debugging
+- [ ] Docker support for local development and testing
 
 ---
 
