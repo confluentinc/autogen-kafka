@@ -3,8 +3,8 @@ import logging
 from autogen_core import AgentType
 from kstreams import ConsumerRecord, Stream, Send
 
-from autogen_kafka_extension._message_serdes import EventSerializer
-from autogen_kafka_extension._registration import RegistrationMessage, RegistrationMessageType
+from autogen_kafka_extension.events._message_serdes import EventSerializer
+from autogen_kafka_extension.events._registration import RegistrationMessage, RegistrationMessageType
 from autogen_kafka_extension._streaming import Streaming
 from autogen_kafka_extension.worker_config import WorkerConfig
 

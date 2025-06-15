@@ -20,11 +20,10 @@ from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import _constants
 from autogen_kafka_extension._agent_registry import AgentRegistry
-from autogen_kafka_extension._message import Message, MessageType
+from autogen_kafka_extension.events._message import Message, MessageType
 from autogen_kafka_extension._streaming import Streaming
-from autogen_kafka_extension._topic_admin import TopicAdmin
 from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension._message_serdes import EventDeserializer, EventSerializer
+from autogen_kafka_extension.events._message_serdes import EventSerializer
 
 T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
@@ -41,6 +40,16 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
     Extends AgentRuntime to provide Kafka-specific functionality for consuming
     and processing messages from configured Kafka topics.
     """
+
+    @property
+    def is_started(self) -> bool:
+        """
+        Check if the Kafka worker runtime has been started.
+
+        Returns:
+            True if the runtime is started, False otherwise.
+        """
+        return self._started
 
     def __init__(
         self,
@@ -115,6 +124,9 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         """
         Stop the Kafka stream processing engine and wait for background tasks to finish.
         """
+        if not self._started:
+            return
+
         # Wait for all background tasks to complete
         final_tasks_results = await asyncio.gather(*self._background_tasks, return_exceptions=True)
         for task_result in final_tasks_results:
@@ -174,10 +186,11 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
 
             # Build the message object
             msg = Message(
-                message_type=MessageType.SEND,
+                message_type=MessageType.REQUEST,
                 request_id=request_id,
                 message_id=message_id,
-                payload_format=message_type,
+                payload_format=JSON_DATA_CONTENT_TYPE,
+                payload_type=message_type,
                 agent_id=sender_id,
                 topic_id=topic_id,
                 recipient=recipient,
@@ -641,12 +654,17 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             recipient=sender,
             metadata=get_telemetry_grpc_metadata(),
         )
-        await send(
-            topic=self._config.response_topic,
-            value=response_message.to_dict(),
-            key=recipient,
-            serializer=EventSerializer()
-        )
+        try:
+            await send(
+                topic=self._config.request_topic,
+                value=response_message,
+                key=recipient.__str__(),
+                serializer=EventSerializer(),
+                headers={}
+            )
+        except Exception as e:
+            logger.error(f"Failed to send response message: {e}")
+            raise RuntimeError(f"Failed to send response: {e}") from e
 
     async def _process_response(self, response: Message) -> None:
         """

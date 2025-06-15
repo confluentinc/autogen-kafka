@@ -1,12 +1,16 @@
 import asyncio
+from typing import List
+
 import pytest
-from autogen_core import try_get_known_serializers_for_type, AgentType, AgentId, TopicId, TypeSubscription
+from autogen_core import try_get_known_serializers_for_type, AgentType, AgentId, TopicId, TypeSubscription, \
+    Subscription, DefaultTopicId
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 from testcontainers.kafka import KafkaContainer
 
 from autogen_kafka_extension.worker_config import WorkerConfig
 from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
-from utils import LoopbackAgent, MessageType, NoopAgent
+from utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
+    LoopbackAgentWithDefaultSubscription
 
 
 @pytest.mark.asyncio
@@ -84,6 +88,233 @@ async def test_agent_types_must_be_unique_multiple_workers() -> None:
 
         await worker1.stop()
         await worker2.stop()
+
+# @pytest.mark.asyncio
+# async def test_disconnected_agent() -> None:
+#     with KafkaContainer() as kafka:
+#         connection = kafka.get_bootstrap_server()
+#
+#         config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
+#                                               request_topic="request",
+#                                               response_topic="response",
+#                                               registry_topic="registry",
+#                                               security_protocol=SecurityProtocol.PLAINTEXT,
+#                                               security_mechanism=SaslMechanism.PLAIN,
+#                                               bootstrap_servers=[connection],
+#                                               group_id="autogen-group_1",
+#                                               client_id="autogen-client_1")
+#         config_2: WorkerConfig = WorkerConfig(title="KafkaWorker",
+#                                               request_topic="request",
+#                                               response_topic="response",
+#                                               registry_topic="registry",
+#                                               security_protocol=SecurityProtocol.PLAINTEXT,
+#                                               security_mechanism=SaslMechanism.PLAIN,
+#                                               bootstrap_servers=[connection],
+#                                               group_id="autogen-group_2",
+#                                               client_id="autogen-client_2")
+#
+#         worker1 = KafkaWorkerAgentRuntime(config=config_1)
+#         worker1_2 = KafkaWorkerAgentRuntime(config=config_2)
+#
+#         # TODO: Implementing `get_current_subscriptions` and `get_subscribed_recipients` requires access
+#         # to some private properties. This needs to be updated once they are available publicly
+#
+#         def get_current_subscriptions() -> List[Subscription]:
+#             return host._servicer._subscription_manager._subscriptions  # type: ignore[reportPrivateUsage]
+#
+#         async def get_subscribed_recipients() -> List[AgentId]:
+#             return await host._servicer._subscription_manager.get_subscribed_recipients(DefaultTopicId())  # type: ignore[reportPrivateUsage]
+#
+#         try:
+#             await worker1.start()
+#             await asyncio.sleep(3)
+#
+#             await LoopbackAgentWithDefaultSubscription.register(
+#                 worker1, "worker1", lambda: LoopbackAgentWithDefaultSubscription()
+#             )
+#
+#             subscriptions1 = get_current_subscriptions()
+#             assert len(subscriptions1) == 2
+#             recipients1 = await get_subscribed_recipients()
+#             assert AgentId(type="worker1", key="default") in recipients1
+#
+#             first_subscription_id = subscriptions1[0].id
+#
+#             await worker1.publish_message(ContentMessage(content="Hello!"), DefaultTopicId())
+#             # This is a simple simulation of worker disconnct
+#             if worker1.is_started is not None:  # type: ignore[reportPrivateUsage]
+#                 try:
+#                     await worker1.stop()  # type: ignore[reportPrivateUsage]
+#                 except asyncio.CancelledError:
+#                     pass
+#
+#             await asyncio.sleep(1)
+#
+#             subscriptions2 = get_current_subscriptions()
+#             assert len(subscriptions2) == 0
+#             recipients2 = await get_subscribed_recipients()
+#             assert len(recipients2) == 0
+#             await asyncio.sleep(1)
+#
+#             await worker1_2.start()
+#             await asyncio.sleep(3)
+#             await LoopbackAgentWithDefaultSubscription.register(
+#                 worker1_2, "worker1", lambda: LoopbackAgentWithDefaultSubscription()
+#             )
+#
+#             subscriptions3 = get_current_subscriptions()
+#             assert len(subscriptions3) == 2
+#             assert first_subscription_id not in [x.id for x in subscriptions3]
+#
+#             recipients3 = await get_subscribed_recipients()
+#             assert len(set(recipients2)) == len(recipients2)  # Make sure there are no duplicates
+#             assert AgentId(type="worker1", key="default") in recipients3
+#         except Exception as ex:
+#             raise ex
+#         finally:
+#             await worker1.stop()
+#             await worker1_2.stop()
+
+@pytest.mark.asyncio
+async def test_agent_type_register_instance() -> None:
+    with KafkaContainer() as kafka:
+        connection = kafka.get_bootstrap_server()
+
+        config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
+                                              request_topic="request",
+                                              response_topic="response",
+                                              registry_topic="registry",
+                                              security_protocol=SecurityProtocol.PLAINTEXT,
+                                              security_mechanism=SaslMechanism.PLAIN,
+                                              bootstrap_servers=[connection],
+                                              group_id="autogen-group_1",
+                                              client_id="autogen-client_1")
+
+        worker = KafkaWorkerAgentRuntime(config=config_1)
+        await worker.start()
+
+        agent1_id = AgentId(type="name", key="default")
+        agentdup_id = AgentId(type="name", key="default")
+        agent2_id = AgentId(type="name", key="notdefault")
+
+        agent1 = NoopAgent()
+        agent2 = NoopAgent()
+        agentdup = NoopAgent()
+
+        await worker.register_agent_instance(agent1, agent_id=agent1_id)
+        await worker.register_agent_instance(agent2, agent_id=agent2_id)
+
+        with pytest.raises(ValueError):
+            await worker.register_agent_instance(agentdup, agent_id=agentdup_id)
+
+        assert await worker.try_get_underlying_agent_instance(agent1_id, type=NoopAgent) == agent1
+        assert await worker.try_get_underlying_agent_instance(agent2_id, type=NoopAgent) == agent2
+
+        await worker.stop()
+
+@pytest.mark.asyncio
+async def test_agent_type_register_instance_different_types() -> None:
+    with KafkaContainer() as kafka:
+        connection = kafka.get_bootstrap_server()
+
+        config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
+                                              request_topic="request",
+                                              response_topic="response",
+                                              registry_topic="registry",
+                                              security_protocol=SecurityProtocol.PLAINTEXT,
+                                              security_mechanism=SaslMechanism.PLAIN,
+                                              bootstrap_servers=[connection],
+                                              group_id="autogen-group_1",
+                                              client_id="autogen-client_1")
+
+        worker = KafkaWorkerAgentRuntime(config=config_1)
+        await worker.start()
+
+        agent1_id = AgentId(type="name", key="noop")
+        agent2_id = AgentId(type="name", key="loopback")
+
+        agent1 = NoopAgent()
+        agent2 = LoopbackAgent()
+
+        await worker.register_agent_instance(agent1, agent_id=agent1_id)
+        with pytest.raises(ValueError):
+            await worker.register_agent_instance(agent2, agent_id=agent2_id)
+
+        await worker.stop()
+
+@pytest.mark.asyncio
+async def test_register_instance_factory() -> None:
+    with KafkaContainer() as kafka:
+        connection = kafka.get_bootstrap_server()
+
+        config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
+                                              request_topic="request",
+                                              response_topic="response",
+                                              registry_topic="registry",
+                                              security_protocol=SecurityProtocol.PLAINTEXT,
+                                              security_mechanism=SaslMechanism.PLAIN,
+                                              bootstrap_servers=[connection],
+                                              group_id="autogen-group_1",
+                                              client_id="autogen-client_1")
+
+        worker = KafkaWorkerAgentRuntime(config=config_1)
+        await worker.start()
+
+        agent1_id = AgentId(type="name", key="default")
+        agent1 = NoopAgent()
+
+        await agent1.register_instance(runtime=worker, agent_id=agent1_id)
+
+        with pytest.raises(ValueError):
+            await NoopAgent.register(runtime=worker, type="name", factory=lambda: NoopAgent())
+
+        await worker.stop()
+
+@pytest.mark.asyncio
+async def test_instance_factory_messaging() -> None:
+    loopback_agent_id = AgentId(type="dm_agent", key="dm_agent")
+    cascading_agent_id = AgentId(type="instance_agent", key="instance_agent")
+
+    with KafkaContainer() as kafka:
+        connection = kafka.get_bootstrap_server()
+
+        config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
+                                              request_topic="request",
+                                              response_topic="response",
+                                              registry_topic="registry",
+                                              security_protocol=SecurityProtocol.PLAINTEXT,
+                                              security_mechanism=SaslMechanism.PLAIN,
+                                              bootstrap_servers=[connection],
+                                              group_id="autogen-group_1",
+                                              client_id="autogen-client_1")
+
+        worker = KafkaWorkerAgentRuntime(config=config_1)
+        await worker.start()
+
+        await asyncio.sleep(2)
+
+        cascading_agent = CascadingAgent(max_rounds=5)
+        loopback_agent = LoopbackAgent()
+
+        await loopback_agent.register_instance(worker, agent_id=loopback_agent_id)
+        resp = await worker.send_message(message=ContentMessage(content="Hello!"), recipient=loopback_agent_id)
+        assert resp == ContentMessage(content="Hello!")
+
+        await cascading_agent.register_instance(worker, agent_id=cascading_agent_id)
+        await CascadingAgent.register(worker, "factory_agent", lambda: CascadingAgent(max_rounds=5))
+
+        # instance_agent will publish a message that factory_agent will pick up
+        for i in range(5):
+            await worker.publish_message(
+                CascadingMessageType(round=i + 1), TopicId(type="instance_agent", source="instance_agent")
+            )
+        await asyncio.sleep(2)
+
+        agent = await worker.try_get_underlying_agent_instance(AgentId("factory_agent", "default"), CascadingAgent)
+        assert agent.num_calls == 4
+        assert cascading_agent.num_calls == 5
+
+        await worker.stop()
 
 @pytest.mark.asyncio
 async def test_register_receives_publish() -> None:

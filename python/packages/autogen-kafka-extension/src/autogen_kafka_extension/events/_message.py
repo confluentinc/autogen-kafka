@@ -1,3 +1,4 @@
+import base64
 from enum import Enum
 from mailbox import Message
 from typing import Any
@@ -11,7 +12,7 @@ class MessageType(Enum):
     RESPONSE = "response"
     ERROR = "error"
 
-class Message(object):
+class  Message(object):
 
     @property
     def message_type(self) -> MessageType:
@@ -94,7 +95,7 @@ class Message(object):
             "agent_id": self._agent_id.__str__() if self._agent_id else None,
             "request_id": self._request_id,
             "recipient": self._recipient.__str__() if self._recipient else None,
-            "payload": self._payload,
+            "payload": base64.b64encode(self._payload).decode("ascii") if self._payload else None,
             "payload_type": self._payload_type,
             "payload_format": self._payload_format,
             "metadata": self._metadata if self._metadata else {},
@@ -122,7 +123,7 @@ class Message(object):
             agent_id=agent_id,
             topic_id=topic_id,
             recipient=recipient,
-            payload=payload,
+            payload=base64.b64decode(payload) if payload else None,
             payload_type=payload_type,
             payload_format=payload_format,
             request_id=request_id,

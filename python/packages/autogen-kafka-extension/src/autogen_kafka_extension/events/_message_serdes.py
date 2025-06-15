@@ -10,8 +10,8 @@ import json
 from kstreams.serializers import Serializer
 
 from autogen_kafka_extension._constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension._message import Message
-from autogen_kafka_extension._registration import RegistrationMessage
+from autogen_kafka_extension.events._message import Message
+from autogen_kafka_extension.events._registration import RegistrationMessage
 
 
 class EventDeserializer(middleware.BaseMiddleware):
