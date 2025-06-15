@@ -69,7 +69,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,
                                                              streaming=self._streaming_svc)
         self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
-                                                                          streaming=self._streaming_svc)
+                                                                          streaming_service=self._streaming_svc)
 
         # Component managers
         self._agent_manager = AgentManager(self)

@@ -19,40 +19,66 @@ A scalable, event-driven runtime extension for [Microsoft AutoGen](https://githu
 
 ```
 autogen-kafka/
-├── python/                    # Main Python workspace
+├── python/                              # Main Python workspace
 │   ├── packages/
-│   │   └── autogen-kafka-extension/  # Core extension package
-│   │       └── src/
-│   │           └── autogen_kafka_extension/
-│   │               ├── worker_runtime.py      # Main runtime implementation
-│   │               ├── worker_config.py       # Configuration classes
-│   │               ├── _streaming.py          # Kafka streaming logic
-│   │               ├── _message_serdes.py     # Message serialization
-│   │               └── _agent_registry.py     # Agent management
-│   ├── pyproject.toml         # Python project configuration
-│   └── README.md              # Detailed implementation guide
-├── pyproject.toml             # Root project metadata
-├── service.yml                # Service configuration
-└── README.md                  # This file
+│   │   └── autogen-kafka-extension/     # Core extension package
+│   │       ├── src/
+│   │       │   └── autogen_kafka_extension/
+│   │       │       ├── worker_runtime.py           # Main runtime implementation
+│   │       │       ├── worker_config.py            # Configuration classes
+│   │       │       ├── streaming_service.py        # Kafka streaming service
+│   │       │       ├── message_processor.py        # Message processing logic
+│   │       │       ├── agent_registry.py           # Agent registration management
+│   │       │       ├── agent_manager.py            # Agent lifecycle management
+│   │       │       ├── subscription_service.py     # Subscription management
+│   │       │       ├── topic_admin.py              # Kafka topic administration
+│   │       │       ├── background_task_manager.py  # Background task handling
+│   │       │       ├── constants.py                # Shared constants
+│   │       │       ├── events/                     # Event handling and serialization
+│   │       │       │   ├── message_serdes.py       # Message serialization/deserialization
+│   │       │       │   ├── message.py              # Message data structures
+│   │       │       │   ├── subscription_evt.py     # Subscription events
+│   │       │       │   └── registration.py         # Registration events
+│   │       │       └── py.typed                    # Type hints marker
+│   │       ├── tests/                   # Package tests
+│   │       │   ├── test_worker_runtime.py
+│   │       │   └── utils.py
+│   │       └── pyproject.toml          # Package configuration
+│   ├── pyproject.toml                   # Python workspace configuration
+│   ├── uv.lock                         # Dependency lock file
+│   ├── shared_tasks.toml               # Shared task configuration
+│   └── README.md                       # Detailed implementation guide
+├── pyproject.toml                       # Root project metadata
+├── service.yml                          # Service configuration
+├── CHANGELOG.md                         # Version history
+├── LICENSE                              # Apache 2.0 License
+└── README.md                           # This file
 ```
 
 ## 📋 Requirements
 
 - **Python**: 3.10 or higher
 - **Apache Kafka**: Local cluster or managed service (e.g., Confluent Cloud)
-- **Dependencies**: See `python/pyproject.toml` for full list
+- **UV**: For dependency management (recommended)
 
 ### Core Dependencies
 - `autogen-core>=0.6.1` - Core AutoGen framework
+- `autogen>=0.1.0` - AutoGen library
 - `confluent-kafka>=2.10.1` - Kafka client
 - `kstreams>=0.26.9` - Kafka Streams abstraction
 - `cloudevents>=1.12.0` - CloudEvents support
+- `aiorun>=2025.1.1` - Async runtime management
+
+### Development Dependencies
+- `pytest>=8.4.0` - Testing framework
+- `pytest-asyncio>=1.0.0` - Async testing support
+- `testcontainers>=4.10.0` - Integration testing with Kafka
 
 ## 🏃 Quick Start
 
 ### 1. Installation
 
-Navigate to the Python directory and install dependencies:
+Navigate to the Python directory and install dependencies using UV:
 
 ```bash
 cd python
@@ -68,6 +94,8 @@ Ensure your Kafka cluster is running. For local development:
 docker-compose up -d kafka zookeeper
 ```
 
+Or use a managed Kafka service like Confluent Cloud.
+
 ### 3. Basic Usage
 
 ```python
@@ -78,7 +106,7 @@ from autogen_core.agent import AgentId
 # Configure the runtime
 config = WorkerConfig(
     request_topic="agent.requests",
-    response_topic="agent.responses", 
+    subscription_topic="agent.responses", 
     group_id="worker-group",
     client_id="worker-client",
     title="My Agent Runtime"
@@ -88,13 +116,24 @@ config = WorkerConfig(
 runtime = KafkaWorkerAgentRuntime(config)
 await runtime.start()
 
-# Register an agent
+# Register an agent factory
 await runtime.register_factory("echo", lambda: EchoAgent())
 
-# Send a message
+# Register a specific agent instance
+agent_id = AgentId("echo", "instance-001")
+await runtime.register_agent_instance(EchoAgent(), agent_id)
+
+# Send a message (RPC-style)
 response = await runtime.send_message(
     "Hello World", 
     recipient=AgentId("echo", "instance-001")
+)
+
+# Publish a message (broadcast)
+from autogen_core.topic import TopicId
+await runtime.publish_message(
+    "Announcement", 
+    topic_id=TopicId("event", "broadcast")
 )
 ```
 
@@ -113,6 +152,14 @@ The project uses:
 - **UV** for dependency management and Python tooling
 - **pytest** for testing with async support
 - **testcontainers** for integration testing with Kafka
+- **Workspace structure** for organized package management
+
+### Package Development
+
+The extension is organized as a UV workspace with the main package located in `python/packages/autogen-kafka-extension/`. This structure allows for:
+- Clean separation of concerns
+- Easy testing and development
+- Extensible architecture for additional packages
 
 ## 📖 Documentation
 
@@ -120,15 +167,15 @@ For detailed implementation guides, architecture details, and advanced usage exa
 
 ## 🤝 Contributing
 
-This repository is part of the Confluent organization on GitHub and is open to contributions from the community.
+This repository is part of the broader AutoGen ecosystem and welcomes contributions from the community.
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Make your changes with appropriate tests
+4. Ensure all tests pass (`uv run pytest`)
 5. Submit a pull request
 
-Please see the [LICENSE](LICENSE) file for contribution terms.
+Please ensure your code follows the project's coding standards and includes appropriate tests.
 
 ## 📄 License
 
@@ -138,12 +185,23 @@ This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENS
 
 See [CHANGELOG.md](CHANGELOG.md) for details of recent updates and version history.
 
-## 🆘 Support
+## 🆘 Support & Resources
 
-- **Issues**: Report bugs and request features via [GitHub Issues](../../issues)
+- **Issues**: Report bugs and request features via GitHub Issues
 - **Documentation**: Check the [Python README](python/README.md) for detailed usage
+- **AutoGen Core**: Learn about [AutoGen concepts](https://github.com/microsoft/autogen)
+- **Apache Kafka**: [Official Kafka documentation](https://kafka.apache.org/documentation/)
 - **Community**: Join discussions in the AutoGen community
+
+## 🎯 Roadmap
+
+- [ ] Enhanced agent state persistence
+- [ ] Agent metadata service integration
+- [ ] Pluggable metrics and monitoring
+- [ ] Advanced CLI tooling for debugging
+- [ ] Extended CloudEvents support
+- [ ] Performance optimizations for high-throughput scenarios
 
 ---
 
-**Note**: This is an extension for Microsoft AutoGen. Make sure you're familiar with the [core AutoGen concepts](https://github.com/microsoft/autogen) before using this Kafka extension.
+**Note**: This is an extension for Microsoft AutoGen. Familiarity with [core AutoGen concepts](https://github.com/microsoft/autogen) is recommended before using this Kafka extension.
