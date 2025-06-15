@@ -2,6 +2,7 @@ import logging
 from typing import Optional, Dict
 
 from aiokafka import ConsumerRecord
+from autogen_core import Subscription
 from cloudevents.pydantic import CloudEvent
 from kstreams import middleware
 
@@ -9,9 +10,10 @@ import json
 
 from kstreams.serializers import Serializer
 
-from autogen_kafka_extension._constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension.events._message import Message
-from autogen_kafka_extension.events._registration import RegistrationMessage
+from autogen_kafka_extension.constants import EVENT_TYPE_ATTR
+from autogen_kafka_extension.events.message import Message
+from autogen_kafka_extension.events.registration import RegistrationMessage
+from autogen_kafka_extension.events.subscription_evt import SubscriptionEvt
 
 
 class EventDeserializer(middleware.BaseMiddleware):
@@ -59,6 +61,10 @@ class EventDeserializer(middleware.BaseMiddleware):
                     # If the event type is RegistrationMessage, create a RegistrationMessage instance
                     values = json.loads(cr.value)
                     cr.value = RegistrationMessage.from_dict(values)
+                elif evt_type == SubscriptionEvt.__name__:
+                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
+                    values = json.loads(cr.value)
+                    cr.value = SubscriptionEvt.from_dict(values)
                 elif evt_type == CloudEvent.__name__:
                     cr.value = CloudEvent(attributes=headers, data=cr.value)
             except ValueError as e:
@@ -111,7 +117,9 @@ class EventSerializer(Serializer):
             headers[EVENT_TYPE_ATTR] = CloudEvent.__name__
 
             return result
-        elif not isinstance(payload, Message) and not isinstance(payload, RegistrationMessage):
+        elif (not isinstance(payload, Message) and
+              not isinstance(payload, RegistrationMessage) and
+              not isinstance(payload, SubscriptionEvt)):
             raise RuntimeError(f"Unsupported payload type: {type(payload)}")
 
         try:

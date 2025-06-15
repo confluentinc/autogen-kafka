@@ -8,17 +8,17 @@ from autogen_core import (
     Agent, AgentId, TopicId, CancellationToken, JSON_DATA_CONTENT_TYPE,
     MessageContext, MessageHandlerContext
 )
-from autogen_core._runtime_impl_helpers import SubscriptionManager
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from cloudevents.pydantic import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import _constants
+from autogen_kafka_extension import constants
 from autogen_kafka_extension.agent_manager import AgentManager
-from autogen_kafka_extension.events._message import Message, MessageType
+from autogen_kafka_extension.events.message import Message, MessageType
+from autogen_kafka_extension.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.events._message_serdes import EventSerializer
+from autogen_kafka_extension.events.message_serdes import EventSerializer
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +30,13 @@ class MessageProcessor:
         self,
         agent_manager: AgentManager,
         serialization_registry: SerializationRegistry,
-        subscription_manager: SubscriptionManager,
+        subscription_service: SubscriptionService,
         trace_helper: TraceHelper,
         config: WorkerConfig
     ):
         self._agent_manager = agent_manager
         self._serialization_registry = serialization_registry
-        self._subscription_manager = subscription_manager
+        self._subscription_service = subscription_service
         self._trace_helper = trace_helper
         self._config = config
     
@@ -44,16 +44,16 @@ class MessageProcessor:
         """Process an incoming CloudEvent message."""
         event_attributes = event.get_attributes()
         sender: AgentId | None = None
-        if (_constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
-                event_attributes[_constants.AGENT_SENDER_TYPE_ATTR] is not None and
-                _constants.AGENT_SENDER_KEY_ATTR in event_attributes and
-                event_attributes[_constants.AGENT_SENDER_KEY_ATTR] is not None):
-            sender = AgentId(event_attributes[_constants.AGENT_SENDER_TYPE_ATTR],
-                             event_attributes[_constants.AGENT_SENDER_KEY_ATTR],)
+        if (constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
+                event_attributes[constants.AGENT_SENDER_TYPE_ATTR] is not None and
+                constants.AGENT_SENDER_KEY_ATTR in event_attributes and
+                event_attributes[constants.AGENT_SENDER_KEY_ATTR] is not None):
+            sender = AgentId(event_attributes[constants.AGENT_SENDER_TYPE_ATTR],
+                             event_attributes[constants.AGENT_SENDER_KEY_ATTR],)
         topic_id = TopicId(event.type, event.source)
-        recipients = await self._subscription_manager.get_subscribed_recipients(topic_id)
-        message_content_type = event_attributes[_constants.DATA_CONTENT_TYPE_ATTR]
-        message_type = event_attributes[_constants.DATA_SCHEMA_ATTR]
+        recipients = await self._subscription_service.get_subscribed_recipients(topic_id)
+        message_content_type = event_attributes[constants.DATA_CONTENT_TYPE_ATTR]
+        message_type = event_attributes[constants.DATA_SCHEMA_ATTR]
 
         if message_content_type == JSON_DATA_CONTENT_TYPE:
             message = self._serialization_registry.deserialize(
@@ -63,10 +63,10 @@ class MessageProcessor:
             raise ValueError(f"Unsupported message content type: {message_content_type}")
 
         topic_type_suffix = topic_id.type.split(":", maxsplit=1)[1] if ":" in topic_id.type else ""
-        is_rpc = topic_type_suffix == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
+        is_rpc = topic_type_suffix == constants.MESSAGE_KIND_VALUE_RPC_REQUEST
         is_marked_rpc_type = (
-            _constants.MESSAGE_KIND_ATTR in event_attributes
-            and event_attributes[_constants.MESSAGE_KIND_ATTR] == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
+            constants.MESSAGE_KIND_ATTR in event_attributes
+            and event_attributes[constants.MESSAGE_KIND_ATTR] == constants.MESSAGE_KIND_VALUE_RPC_REQUEST
         )
         if is_rpc and not is_marked_rpc_type:
             warnings.warn("Received RPC request with topic type suffix but not marked as RPC request.", stacklevel=2)
@@ -159,7 +159,7 @@ class MessageProcessor:
                 metadata=get_telemetry_grpc_metadata()
             )
             await send(
-                topic=self._config.response_topic,
+                topic=self._config.request_topic,
                 value=response_message.to_dict(),
                 key=recipient,
                 serializer=EventSerializer()

@@ -49,7 +49,7 @@ from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
 
 config = WorkerConfig(
     request_topic="agent.requests",
-    response_topic="agent.responses",
+    subscription_topic="agent.responses",
     group_id="worker-group",
     client_id="worker-client",
     title="Agent Runtime"

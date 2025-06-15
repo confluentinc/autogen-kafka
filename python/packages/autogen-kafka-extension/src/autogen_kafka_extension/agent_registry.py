@@ -4,9 +4,9 @@ from typing import Dict, Union
 from autogen_core import AgentType
 from kstreams import ConsumerRecord, Stream, Send
 
-from autogen_kafka_extension.events._message_serdes import EventSerializer
-from autogen_kafka_extension.events._registration import RegistrationMessage, RegistrationMessageType
-from autogen_kafka_extension._streaming import Streaming
+from autogen_kafka_extension.events.message_serdes import EventSerializer
+from autogen_kafka_extension.events.registration import RegistrationMessage, RegistrationMessageType
+from autogen_kafka_extension.streaming_service import StreamingService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
@@ -20,11 +20,11 @@ class AgentRegistry:
     allowing multiple workers to coordinate agent availability.
     """
 
-    def __init__(self, config: WorkerConfig, streaming: Streaming | None = None) -> None:
+    def __init__(self, config: WorkerConfig, streaming: StreamingService | None = None) -> None:
         self._agents: Dict[str, Union[str, AgentType]] = {}
         self._started: bool = False
         self._config = config
-        self._streaming = streaming if streaming else Streaming(config)
+        self._streaming = streaming if streaming else StreamingService(config)
         
         # Set up the registration stream
         self._setup_registration_stream()

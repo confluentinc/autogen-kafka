@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
 from kstreams.types import StreamFunc
 
-from autogen_kafka_extension.events._message_serdes import EventSerializer, EventDeserializer
-from autogen_kafka_extension._topic_admin import TopicAdmin
+from autogen_kafka_extension.events.message_serdes import EventSerializer, EventDeserializer
+from autogen_kafka_extension.topic_admin import TopicAdmin
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 
@@ -29,7 +29,7 @@ class StreamConfig:
         }
 
 
-class Streaming(StreamEngine):
+class StreamingService(StreamEngine):
     """
     Kafka streaming engine that extends StreamEngine with topic management capabilities.
     

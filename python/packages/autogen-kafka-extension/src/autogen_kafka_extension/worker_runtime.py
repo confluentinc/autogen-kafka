@@ -15,15 +15,16 @@ from cloudevents.pydantic import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension import _constants
-from autogen_kafka_extension._agent_registry import AgentRegistry
+from autogen_kafka_extension import constants
+from autogen_kafka_extension.agent_registry import AgentRegistry
 from autogen_kafka_extension.agent_manager import AgentManager
 from autogen_kafka_extension.background_task_manager import BackgroundTaskManager
-from autogen_kafka_extension.events._message import Message, MessageType
+from autogen_kafka_extension.events.message import Message, MessageType
 from autogen_kafka_extension.message_processor import MessageProcessor
-from autogen_kafka_extension._streaming import Streaming
+from autogen_kafka_extension.streaming_service import StreamingService
+from autogen_kafka_extension.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.events._message_serdes import EventSerializer
+from autogen_kafka_extension.events.message_serdes import EventSerializer
 
 T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
@@ -41,6 +42,10 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         """Check if the Kafka worker runtime has been started."""
         return self._started
 
+    @property
+    def subscription_service(self) -> SubscriptionService:
+        return self._subscription_svc
+
     def __init__(
         self,
         config: WorkerConfig,
@@ -57,8 +62,14 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._config = config
 
         # Core services
-        self._subscription_manager = SubscriptionManager()
         self._serialization_registry = SerializationRegistry()
+
+        # Kafka components
+        self._streaming_svc: StreamingService = StreamingService(config)
+        self._agent_registry : AgentRegistry = AgentRegistry(config=config,
+                                                             streaming=self._streaming_svc)
+        self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
+                                                                          streaming=self._streaming_svc)
 
         # Component managers
         self._agent_manager = AgentManager(self)
@@ -66,7 +77,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._message_processor = MessageProcessor(
             self._agent_manager,
             self._serialization_registry,
-            self._subscription_manager,
+            self._subscription_svc,
             self._trace_helper,
             self._config
         )
@@ -76,20 +87,11 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
-        # Kafka components
-        self._stream_engine: Streaming | None = None
-        self._agent_registry : AgentRegistry | None = None
-
     async def start(self) -> None:
         """Start the Kafka stream processing engine and begin consuming messages."""
         logger.info("Starting Kafka stream processing engine")
         try:
-            self._stream_engine: Streaming = Streaming(self._config)
-            self._agent_registry = AgentRegistry(config=self._config,
-                                                 streaming=self._stream_engine)
-
-            self._stream_engine.create_topics([self._config.response_topic])
-            self._stream_engine.create_and_add_stream(
+            self._streaming_svc.create_and_add_stream(
                 name=self._config.title,
                 topics=[self._config.request_topic],
                 group_id=self._config.group_id,
@@ -97,7 +99,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
                 func=self._on_record
             )
 
-            await self._stream_engine.start()
+            await self._streaming_svc.start()
         except Exception as e:
             logger.error(f"Failed to start Kafka stream engine: {e}")
             raise
@@ -112,9 +114,12 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
 
         await self._background_task_manager.wait_for_completion()
 
-        if self._stream_engine is not None and self._started:
+        logger.info("Stopping Kafka stream processing engine")
+        await self._subscription_svc.unsubscribe_all()
+
+        if self._streaming_svc is not None and self._started:
             try:
-                await self._stream_engine.stop()
+                await self._streaming_svc.stop()
             except Exception as e:
                 logger.error(f"Failed to stop Kafka stream engine: {e}")
 
@@ -204,17 +209,17 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
                 "source": topic_id.source,
                 "type": topic_id.type,
                 "attributes": {
-                    _constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
-                    _constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
-                    _constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
-                    _constants.DATA_SCHEMA_ATTR: message_type,
-                    _constants.MESSAGE_KIND_ATTR: _constants.MESSAGE_KIND_VALUE_PUBLISH,
+                    constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
+                    constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
+                    constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
+                    constants.DATA_SCHEMA_ATTR: message_type,
+                    constants.MESSAGE_KIND_ATTR: constants.MESSAGE_KIND_VALUE_PUBLISH,
                 },
-                _constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
-                _constants.DATA_SCHEMA_ATTR: message_type,
-                _constants.MESSAGE_KIND_ATTR: _constants.MESSAGE_KIND_VALUE_PUBLISH,
-                _constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
-                _constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
+                constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
+                constants.DATA_SCHEMA_ATTR: message_type,
+                constants.MESSAGE_KIND_ATTR: constants.MESSAGE_KIND_VALUE_PUBLISH,
+                constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
+                constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
             }
 
             cloud_evt: CloudEvent = CloudEvent(
@@ -232,11 +237,11 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
 
     async def remove_subscription(self, id: str) -> None:
         """Remove a subscription by its ID."""
-        await self._subscription_manager.remove_subscription(id)
+        await self._subscription_svc.remove_subscription(id)
 
     async def add_subscription(self, subscription: Subscription) -> None:
         """Add a new subscription."""
-        await self._subscription_manager.add_subscription(subscription)
+        await self._subscription_svc.add_subscription(subscription)
 
     async def register_factory(
         self,
@@ -292,7 +297,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             raise RuntimeError("KafkaWorkerAgentRuntime is not started. Call start() before sending messages.")
 
         try:
-            await self._stream_engine.send(
+            await self._streaming_svc.send(
                 topic=self._config.request_topic,
                 value=message,
                 key=recipient.__str__(),

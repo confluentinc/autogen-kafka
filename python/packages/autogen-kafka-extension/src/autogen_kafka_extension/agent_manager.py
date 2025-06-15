@@ -6,7 +6,7 @@ from autogen_core import (
     AgentRuntime, Agent, AgentId, AgentInstantiationContext, AgentType
 )
 from autogen_core._single_threaded_agent_runtime import type_func_alias
-from autogen_kafka_extension._agent_registry import AgentRegistry
+from autogen_kafka_extension.agent_registry import AgentRegistry
 
 T = TypeVar("T", bound=Agent)
 

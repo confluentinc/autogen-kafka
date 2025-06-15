@@ -24,7 +24,7 @@ class WorkerConfig:
     def __init__(self,
                  title: str,
                  request_topic: str,
-                 response_topic: str,
+                 subscription_topic: str,
                  registry_topic: str,
                  bootstrap_servers: list[str],
                  num_partitions: int | None = 3,
@@ -37,7 +37,7 @@ class WorkerConfig:
                  client_id: str | None = None) -> None:
         self._title = title
         self._request_topic: str = request_topic
-        self._response_topic: str = response_topic
+        self._subscription: str = subscription_topic
         self._sasl_plain_username: str | None = sasl_plain_username
         self._sasl_plain_password: str | None = sasl_plain_password
         self._security_protocol: SecurityProtocol | None = security_protocol
@@ -74,12 +74,12 @@ class WorkerConfig:
         return self._request_topic
 
     @property
-    def response_topic(self) -> str | None:
+    def subscription_topic(self) -> str | None:
         """
         The Kafka topic to produce messages to.
         If not set, the worker will not produce any messages.
         """
-        return self._response_topic
+        return self._subscription
 
     @property
     def registry_topic(self) -> str | None:
