@@ -1,18 +1,15 @@
 import asyncio
-import inspect
 import logging
 import uuid
-import warnings
-from asyncio import Task, Future
-from typing import Dict, Callable, Awaitable, cast, TypeVar, Any, Sequence, Mapping, Set, Type, List
+from asyncio import Future
+from typing import Dict, Callable, Awaitable, TypeVar, Any, Sequence, Mapping, Type
 
 from autogen_core import (
-    AgentRuntime, Agent, AgentId, AgentInstantiationContext, Subscription, TopicId, CancellationToken,
-    JSON_DATA_CONTENT_TYPE, MessageContext, MessageHandlerContext, AgentType, AgentMetadata, MessageSerializer,
+    AgentRuntime, Agent, AgentId, Subscription, TopicId, CancellationToken,
+    JSON_DATA_CONTENT_TYPE, AgentType, AgentMetadata, MessageSerializer,
 )
 from autogen_core._runtime_impl_helpers import SubscriptionManager
 from autogen_core._serialization import SerializationRegistry
-from autogen_core._single_threaded_agent_runtime import type_func_alias
 from autogen_core._telemetry import TraceHelper, MessageRuntimeTracingConfig, get_telemetry_grpc_metadata
 from cloudevents.pydantic import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
@@ -20,7 +17,10 @@ from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import _constants
 from autogen_kafka_extension._agent_registry import AgentRegistry
+from autogen_kafka_extension.agent_manager import AgentManager
+from autogen_kafka_extension.background_task_manager import BackgroundTaskManager
 from autogen_kafka_extension.events._message import Message, MessageType
+from autogen_kafka_extension.message_processor import MessageProcessor
 from autogen_kafka_extension._streaming import Streaming
 from autogen_kafka_extension.worker_config import WorkerConfig
 from autogen_kafka_extension.events._message_serdes import EventSerializer
@@ -28,11 +28,6 @@ from autogen_kafka_extension.events._message_serdes import EventSerializer
 T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
 
-# Helper function to raise exceptions from background tasks
-def _raise_on_exception(task: Task[Any]) -> None:
-    exception = task.exception()
-    if exception is not None:
-        raise exception
 
 class KafkaWorkerAgentRuntime(AgentRuntime):
     """
@@ -43,12 +38,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
 
     @property
     def is_started(self) -> bool:
-        """
-        Check if the Kafka worker runtime has been started.
-
-        Returns:
-            True if the runtime is started, False otherwise.
-        """
+        """Check if the Kafka worker runtime has been started."""
         return self._started
 
     def __init__(
@@ -56,16 +46,9 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         config: WorkerConfig,
         tracer_provider: TracerProvider | None = None
     ) -> None:
-        """
-        Initialize a new KafkaWorkerAgentRuntime instance.
-
-        Args:
-            config: Configuration settings for the Kafka worker.
-            tracer_provider: Optional OpenTelemetry tracer provider for distributed tracing.
-
-        Sets up agent management, subscription management, serialization, and async task tracking.
-        """
+        """Initialize a new KafkaWorkerAgentRuntime instance."""
         super().__init__()
+        
         # Initialize tracing
         self._trace_helper = TraceHelper(tracer_provider, MessageRuntimeTracingConfig("Worker Runtime"))
 
@@ -73,30 +56,32 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         self._started: bool = False
         self._config = config
 
-        # Agent management
-        self._agent_factories: Dict[
-            str, Callable[[], Agent | Awaitable[Agent]] | Callable[[AgentRuntime, AgentId], Agent | Awaitable[Agent]]
-        ] = {}
-        self._instantiated_agents: Dict[AgentId, Agent] = {}
-        self._agent_instance_types: Dict[str, Type[Agent]] = {}
-
         # Core services
         self._subscription_manager = SubscriptionManager()
         self._serialization_registry = SerializationRegistry()
 
-        # Async task management
-        self._background_tasks: Set[Task[Any]] = set()
+        # Component managers
+        self._agent_manager = AgentManager(self)
+        self._background_task_manager = BackgroundTaskManager()
+        self._message_processor = MessageProcessor(
+            self._agent_manager,
+            self._serialization_registry,
+            self._subscription_manager,
+            self._trace_helper,
+            self._config
+        )
+
+        # Request/response handling
         self._pending_requests: Dict[str, Future[Any]] = {}
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
+        # Kafka components
         self._stream_engine: Streaming | None = None
         self._agent_registry : AgentRegistry | None = None
 
     async def start(self) -> None:
-        """
-        Start the Kafka stream processing engine and begin consuming messages.
-        """
+        """Start the Kafka stream processing engine and begin consuming messages."""
         logger.info("Starting Kafka stream processing engine")
         try:
             self._stream_engine: Streaming = Streaming(self._config)
@@ -121,17 +106,11 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         logger.info("Kafka stream processing engine started")
 
     async def stop(self) -> None:
-        """
-        Stop the Kafka stream processing engine and wait for background tasks to finish.
-        """
+        """Stop the Kafka stream processing engine and wait for background tasks to finish."""
         if not self._started:
             return
 
-        # Wait for all background tasks to complete
-        final_tasks_results = await asyncio.gather(*self._background_tasks, return_exceptions=True)
-        for task_result in final_tasks_results:
-            if isinstance(task_result, Exception):
-                logger.error("Error in background task", exc_info=task_result)
+        await self._background_task_manager.wait_for_completion()
 
         if self._stream_engine is not None and self._started:
             try:
@@ -148,19 +127,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None
     ) -> Any:
-        """
-        Send a message to a specific agent via Kafka and await a response.
-
-        Args:
-            message: The message payload.
-            recipient: The agent to receive the message.
-            sender: The agent sending the message.
-            cancellation_token: Optional cancellation token.
-            message_id: Optional message ID.
-
-        Returns:
-            The response from the recipient agent.
-        """
+        """Send a message to a specific agent via Kafka and await a response."""
         if not self._started:
             raise RuntimeError("KafkaWorkerAgentRuntime is not started. Call start() before publishing messages.")
         if message_id is None:
@@ -199,7 +166,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             )
 
             # Send the message in the background
-            self._add_background_task(
+            self._background_task_manager.add_task(
                 self._send_message(
                     message = msg,
                     telemetry_metadata=telemetry_metadata,
@@ -216,16 +183,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None,
     ) -> None:
-        """
-        Publish a message to a Kafka topic (broadcast).
-
-        Args:
-            message: The message payload.
-            topic_id: The topic to publish to.
-            sender: The agent sending the message.
-            cancellation_token: Optional cancellation token.
-            message_id: Optional message ID.
-        """
+        """Publish a message to a Kafka topic (broadcast)."""
         if not self._started:
             raise RuntimeError("KafkaWorkerAgentRuntime is not started. Call start() before publishing messages.")
         if message_id is None:
@@ -265,7 +223,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             )
 
             # Send the message in the background
-            self._add_background_task(
+            self._background_task_manager.add_task(
                 self._send_message(
                     message=cloud_evt,
                     recipient=topic_id,
@@ -273,15 +231,11 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             )
 
     async def remove_subscription(self, id: str) -> None:
-        """
-        Remove a subscription by its ID.
-        """
+        """Remove a subscription by its ID."""
         await self._subscription_manager.remove_subscription(id)
 
     async def add_subscription(self, subscription: Subscription) -> None:
-        """
-        Add a new subscription.
-        """
+        """Add a new subscription."""
         await self._subscription_manager.add_subscription(subscription)
 
     async def register_factory(
@@ -291,154 +245,41 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         *,
         expected_class: type[T] | None = None
     ) -> AgentType:
-        """
-        Register a factory for creating agents of a given type.
-
-        Args:
-            type: The agent type.
-            agent_factory: The factory function.
-            expected_class: Optionally enforce the agent class.
-
-        Returns:
-            The registered AgentType.
-        """
-        if isinstance(type, str):
-            type = AgentType(type)
-
-        if type.type in self._agent_factories:
-            raise ValueError(f"Agent with type {type} already exists.")
-        if self._agent_registry.is_registered(type):
-            raise ValueError(f"Agent type {type.type} already registered")
-
-        async def factory_wrapper() -> T:
-            maybe_agent_instance = agent_factory()
-            if inspect.isawaitable(maybe_agent_instance):
-                agent_instance = await maybe_agent_instance
-            else:
-                agent_instance = maybe_agent_instance
-
-            if expected_class is not None and type_func_alias(agent_instance) != expected_class:
-                raise ValueError("Factory registered using the wrong type.")
-
-            return agent_instance
-
-        self._agent_factories[type.type] = factory_wrapper
-        await self._agent_registry.register_agent(type)
-        return type
+        """Register a factory for creating agents of a given type."""
+        return await self._agent_manager.register_factory(
+            type, agent_factory, self._agent_registry, expected_class=expected_class
+        )
 
     async def register_agent_instance(
         self,
         agent_instance: Agent,
         agent_id: AgentId,
     ) -> AgentId:
-        """
-        Register a specific agent instance with a given ID.
-
-        Args:
-            agent_instance: The agent instance.
-            agent_id: The agent's ID.
-
-        Returns:
-            The registered AgentId.
-        """
-        def agent_factory() -> Agent:
-            raise RuntimeError(
-                "Agent factory was invoked for an agent instance that was not registered. This is likely due to the agent type being incorrectly subscribed to a topic. If this exception occurs when publishing a message to the DefaultTopicId, then it is likely that `skip_class_subscriptions` needs to be turned off when registering the agent."
-            )
-
-        if agent_id in self._instantiated_agents:
-            raise ValueError(f"Agent with id {agent_id} already exists.")
-
-        if agent_id.type not in self._agent_factories:
-            self._agent_factories[agent_id.type] = agent_factory
-            self._agent_instance_types[agent_id.type] = type_func_alias(agent_instance)
-        else:
-            if self._agent_factories[agent_id.type].__code__ != agent_factory.__code__:
-                raise ValueError("Agent factories and agent instances cannot be registered to the same type.")
-            if self._agent_instance_types[agent_id.type] != type_func_alias(agent_instance):
-                raise ValueError("Agent instances must be the same object type.")
-
-        await agent_instance.bind_id_and_runtime(id=agent_id, runtime=self)
-        self._instantiated_agents[agent_id] = agent_instance
-
-        return agent_id
+        """Register a specific agent instance with a given ID."""
+        return await self._agent_manager.register_instance(agent_instance, agent_id)
 
     async def save_state(self) -> Mapping[str, Any]:
-        """
-        Save the runtime state (not implemented).
-        """
+        """Save the runtime state (not implemented)."""
         raise NotImplementedError("Saving state is not yet implemented.")
 
     async def load_state(self, state: Mapping[str, Any]) -> None:
-        """
-        Load the runtime state (not implemented).
-        """
+        """Load the runtime state (not implemented)."""
         raise NotImplementedError("Loading state is not yet implemented.")
 
     async def agent_metadata(self, agent: AgentId) -> AgentMetadata:
-        """
-        Get agent metadata (not implemented).
-        """
+        """Get agent metadata (not implemented)."""
         raise NotImplementedError("Agent metadata is not yet implemented.")
 
     async def agent_save_state(self, agent: AgentId) -> Mapping[str, Any]:
-        """
-        Save agent state (not implemented).
-        """
+        """Save agent state (not implemented)."""
         raise NotImplementedError("Agent save_state is not yet implemented.")
 
     async def agent_load_state(self, agent: AgentId, state: Mapping[str, Any]) -> None:
-        """
-        Load agent state (not implemented).
-        """
+        """Load agent state (not implemented)."""
         raise NotImplementedError("Agent load_state is not yet implemented.")
 
     async def try_get_underlying_agent_instance(self, id: AgentId, type: Type[T] = Agent) -> T:  # type: ignore[assignment]
-        if id.type not in self._agent_factories:
-            raise LookupError(f"Agent with name {id.type} not found.")
-
-        # TODO: check if remote
-        agent_instance = await self._get_agent(id)
-
-        if not isinstance(agent_instance, type):
-            raise TypeError(f"Agent with name {id.type} is not of type {type.__name__}")
-
-        return agent_instance
-
-    async def _invoke_agent_factory(
-        self,
-        agent_factory: Callable[[], T | Awaitable[T]] | Callable[[AgentRuntime, AgentId], T | Awaitable[T]],
-        agent_id: AgentId,
-    ) -> T:
-        """
-        Invoke an agent factory, supporting both 0-arg and 2-arg signatures.
-
-        Args:
-            agent_factory: The factory function.
-            agent_id: The agent's ID.
-
-        Returns:
-            The created agent instance.
-        """
-        with AgentInstantiationContext.populate_context((self, agent_id)):
-            params = inspect.signature(agent_factory).parameters
-            if len(params) == 0:
-                factory_one = cast(Callable[[], T], agent_factory)
-                agent = factory_one()
-            elif len(params) == 2:
-                warnings.warn(
-                    "Agent factories that take two arguments are deprecated. Use AgentInstantiationContext instead. Two arg factories will be removed in a future version.",
-                    stacklevel=2,
-                )
-                factory_two = cast(Callable[[AgentRuntime, AgentId], T], agent_factory)
-                agent = factory_two(self, agent_id)
-            else:
-                raise ValueError("Agent factory must take 0 or 2 arguments.")
-
-            if inspect.isawaitable(agent):
-                agent = cast(T, await agent)
-
-        return agent
+        return await self._agent_manager.try_get_underlying_agent_instance(id, type)
 
     async def _send_message(
         self,
@@ -446,14 +287,7 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
         telemetry_metadata: Mapping[str, str],
         recipient: AgentId | TopicId = None,
     ) -> None:
-        """
-        Send a message to Kafka using the configured stream engine.
-
-        Args:
-            message: The message to send.
-            telemetry_metadata: Telemetry metadata for tracing.
-            recipient: The recipient agent or topic.
-        """
+        """Send a message to Kafka using the configured stream engine."""
         if not self._started:
             raise RuntimeError("KafkaWorkerAgentRuntime is not started. Call start() before sending messages.")
 
@@ -470,259 +304,35 @@ class KafkaWorkerAgentRuntime(AgentRuntime):
             raise RuntimeError(f"Failed to send message: {e}") from e
 
     async def _get_new_request_id(self) -> str:
-        """
-        Generate a new unique request ID for correlating requests and responses.
-        """
+        """Generate a new unique request ID for correlating requests and responses."""
         async with self._pending_requests_lock:
             self._next_request_id += 1
             return str(self._next_request_id)
 
     async def _on_record(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
-        """
-        Callback for processing incoming Kafka records.
-
-        Args:
-            cr: The consumed record.
-            stream: The stream object.
-            send: The send function for producing responses.
-        """
+        """Callback for processing incoming Kafka records."""
         if isinstance(cr.value, Message):
             # Route based on a message type
             if cr.value.message_type == MessageType.RESPONSE:
-                self._add_background_task(self._process_response(cr.value))
+                self._background_task_manager.add_task(
+                    self._process_response(cr.value)
+                )
             elif cr.value.message_type == MessageType.REQUEST:
-                self._add_background_task(self._process_request(cr.value, send))
+                self._background_task_manager.add_task(
+                    self._message_processor.process_request(cr.value, send)
+                )
             return
 
         if isinstance(cr.value, CloudEvent):
             # Process as a CloudEvent
-            await self._process_event(cr.value)
+            await self._message_processor.process_event(cr.value)
             return
 
         logger.error(f"Received unknown event type: {cr.value}. Expected 'CloudEvent' or 'Message'.")
 
-    async def _process_event(self, event: CloudEvent) -> None:
-        """
-        Process an incoming CloudEvent message.
-
-        Args:
-            event: The CloudEvent to process.
-        """
-        event_attributes = event.get_attributes()
-        sender: AgentId | None = None
-        if (_constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
-                event_attributes[_constants.AGENT_SENDER_TYPE_ATTR] is not None and
-                _constants.AGENT_SENDER_KEY_ATTR in event_attributes and
-                event_attributes[_constants.AGENT_SENDER_KEY_ATTR] is not None):
-            sender = AgentId(event_attributes[_constants.AGENT_SENDER_TYPE_ATTR],
-                             event_attributes[_constants.AGENT_SENDER_KEY_ATTR],)
-        topic_id = TopicId(event.type, event.source)
-        recipients = await self._subscription_manager.get_subscribed_recipients(topic_id)
-        message_content_type = event_attributes[_constants.DATA_CONTENT_TYPE_ATTR]
-        message_type = event_attributes[_constants.DATA_SCHEMA_ATTR]
-
-        if message_content_type == JSON_DATA_CONTENT_TYPE:
-            message = self._serialization_registry.deserialize(
-                event.data, type_name=message_type, data_content_type=message_content_type
-            )
-        else:
-            raise ValueError(f"Unsupported message content type: {message_content_type}")
-
-        topic_type_suffix = topic_id.type.split(":", maxsplit=1)[1] if ":" in topic_id.type else ""
-        is_rpc = topic_type_suffix == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
-        is_marked_rpc_type = (
-            _constants.MESSAGE_KIND_ATTR in event_attributes
-            and event_attributes[_constants.MESSAGE_KIND_ATTR] == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
-        )
-        if is_rpc and not is_marked_rpc_type:
-            warnings.warn("Received RPC request with topic type suffix but not marked as RPC request.", stacklevel=2)
-
-        responses: List[Awaitable[Any]] = []
-        for agent_id in recipients:
-            if agent_id == sender:
-                continue
-            message_context = MessageContext(
-                sender=sender,
-                topic_id=topic_id,
-                is_rpc=is_rpc,
-                cancellation_token=CancellationToken(),
-                message_id=event.id,
-            )
-            agent = await self._get_agent(agent_id)
-            with MessageHandlerContext.populate_context(agent.id):
-
-                def stringify_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str]:
-                    result: Dict[str, str | None] = {}
-                    for key, value in attributes.items():
-                        if isinstance(value, str):
-                            result[key] = value
-                        elif value is None:
-                            result[key] = None
-                        else:
-                            result[key] = str(value)
-
-                    return result
-
-                async def send_message(agent: Agent, msg_ctx: MessageContext) -> Any:
-                    with self._trace_helper.trace_block("process",
-                                                        agent.id,
-                                                        parent=stringify_attributes(event.attributes),
-                                                        extraAttributes={"message_type": message_type}):
-                        await agent.on_message(message, ctx=msg_ctx)
-
-                future = send_message(agent, message_context)
-            responses.append(future)
-        # Wait for all responses.
-        try:
-            result = await asyncio.gather(*responses, return_exceptions=True)
-            for res in result:
-                if isinstance(res, Exception):
-                    logger.error("Error processing event", exc_info=res)
-        except BaseException as e:
-            logger.error("Error handling event", exc_info=e)
-
-    async def _process_request(self, response: Message, send: Send) -> None:
-        """
-        Process an incoming request message, invoke the agent, and send a response.
-
-        Args:
-            response: The incoming request message.
-            send: The send function for producing responses.
-        """
-        recipient = response.recipient
-        sender = response.agent_id
-        if sender is None:
-            logger.info(f"Processing request from unknown source to {recipient}")
-        else:
-            logger.info(f"Processing request from {sender} to {recipient}")
-
-        # Deserialize the message payload
-        message = self._serialization_registry.deserialize(
-            response.payload,
-            type_name=response.payload_type,
-            data_content_type=response.payload_format,
-        )
-
-        # Get the recipient agent
-        rec_agent = await self._get_agent(recipient)
-        message_context = MessageContext(
-            sender=sender,
-            topic_id=None,
-            is_rpc=True,
-            cancellation_token=CancellationToken(),
-            message_id=response.request_id,
-        )
-
-        try:
-            with MessageHandlerContext.populate_context(rec_agent.id):
-                with self._trace_helper.trace_block(
-                    "process",
-                    rec_agent.id,
-                    parent=response.metadata,
-                    attributes={"request_id": response.request_id},
-                    extraAttributes={"message_type": response.payload_type},
-                ):
-                    result = await rec_agent.on_message(message, ctx=message_context)
-        except BaseException as e:
-            # Send error response if agent processing fails
-            response_message = Message(
-                request_id=response.request_id,
-                error=str(e),
-                metadata=get_telemetry_grpc_metadata()
-            )
-            await send(
-                topic=self._config.response_topic,
-                value=response_message.to_dict(),
-                key=recipient,
-                serializer=EventSerializer()
-            )
-            return
-
-        # Serialize and send the successful response
-        result_type = self._serialization_registry.type_name(result)
-        serialized_result = self._serialization_registry.serialize(
-            result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
-        )
-
-        response_message = Message(
-            message_type=MessageType.RESPONSE,
-            request_id=response.request_id,
-            payload=serialized_result,
-            payload_type=result_type,
-            payload_format=JSON_DATA_CONTENT_TYPE,
-            agent_id=rec_agent.id,
-            recipient=sender,
-            metadata=get_telemetry_grpc_metadata(),
-        )
-        try:
-            await send(
-                topic=self._config.request_topic,
-                value=response_message,
-                key=recipient.__str__(),
-                serializer=EventSerializer(),
-                headers={}
-            )
-        except Exception as e:
-            logger.error(f"Failed to send response message: {e}")
-            raise RuntimeError(f"Failed to send response: {e}") from e
-
     async def _process_response(self, response: Message) -> None:
-        """
-        Process an incoming response message and complete the corresponding future.
-
-        Args:
-            response: The response message.
-        """
-        with self._trace_helper.trace_block(
-            "ack",
-            None,
-            parent=response.metadata,
-            attributes={"request_id": response.request_id},
-            extraAttributes={"message_type": response.payload_format},
-        ):
-            result = self._serialization_registry.deserialize(
-                response.payload,
-                type_name=response.payload_type,
-                data_content_type=response.payload_format,
-            )
-            future = self._pending_requests.pop(response.request_id)
-            if response.error and len(response.error) > 0:
-                future.set_exception(Exception(response.error))
-            else:
-                future.set_result(result)
-
-    async def _get_agent(self, agent_id: AgentId) -> Agent:
-        """
-        Retrieve or instantiate an agent by its ID.
-
-        Args:
-            agent_id: The agent's ID.
-
-        Returns:
-            The agent instance.
-        """
-        if agent_id in self._instantiated_agents:
-            return self._instantiated_agents[agent_id]
-
-        if agent_id.type not in self._agent_factories:
-            raise ValueError(f"Agent with name {agent_id.type} not found.")
-
-        agent_factory = self._agent_factories[agent_id.type]
-        agent = await self._invoke_agent_factory(agent_factory, agent_id)
-        self._instantiated_agents[agent_id] = agent
-        return agent
-
-    def _add_background_task(self, coro: Awaitable[Any]) -> None:
-        """
-        Add a coroutine as a background task and track its completion.
-
-        Args:
-            coro: The coroutine to run in the background.
-        """
-        task = asyncio.create_task(coro)
-        self._background_tasks.add(task)
-        task.add_done_callback(_raise_on_exception)
-        task.add_done_callback(self._background_tasks.discard)
+        """Process an incoming response message and complete the corresponding future."""
+        self._message_processor.process_response(response, self._pending_requests)
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
         self._serialization_registry.add_serializer(serializer)

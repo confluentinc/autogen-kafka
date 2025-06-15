@@ -1,0 +1,215 @@
+import asyncio
+import logging
+import warnings
+from asyncio import Future
+from typing import Dict, Any, Awaitable, List, Mapping
+
+from autogen_core import (
+    Agent, AgentId, TopicId, CancellationToken, JSON_DATA_CONTENT_TYPE,
+    MessageContext, MessageHandlerContext
+)
+from autogen_core._runtime_impl_helpers import SubscriptionManager
+from autogen_core._serialization import SerializationRegistry
+from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
+from cloudevents.pydantic import CloudEvent
+from kstreams import Send
+
+from autogen_kafka_extension import _constants
+from autogen_kafka_extension.agent_manager import AgentManager
+from autogen_kafka_extension.events._message import Message, MessageType
+from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.events._message_serdes import EventSerializer
+
+logger = logging.getLogger(__name__)
+
+
+class MessageProcessor:
+    """Handles processing of different message types."""
+    
+    def __init__(
+        self,
+        agent_manager: AgentManager,
+        serialization_registry: SerializationRegistry,
+        subscription_manager: SubscriptionManager,
+        trace_helper: TraceHelper,
+        config: WorkerConfig
+    ):
+        self._agent_manager = agent_manager
+        self._serialization_registry = serialization_registry
+        self._subscription_manager = subscription_manager
+        self._trace_helper = trace_helper
+        self._config = config
+    
+    async def process_event(self, event: CloudEvent) -> None:
+        """Process an incoming CloudEvent message."""
+        event_attributes = event.get_attributes()
+        sender: AgentId | None = None
+        if (_constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
+                event_attributes[_constants.AGENT_SENDER_TYPE_ATTR] is not None and
+                _constants.AGENT_SENDER_KEY_ATTR in event_attributes and
+                event_attributes[_constants.AGENT_SENDER_KEY_ATTR] is not None):
+            sender = AgentId(event_attributes[_constants.AGENT_SENDER_TYPE_ATTR],
+                             event_attributes[_constants.AGENT_SENDER_KEY_ATTR],)
+        topic_id = TopicId(event.type, event.source)
+        recipients = await self._subscription_manager.get_subscribed_recipients(topic_id)
+        message_content_type = event_attributes[_constants.DATA_CONTENT_TYPE_ATTR]
+        message_type = event_attributes[_constants.DATA_SCHEMA_ATTR]
+
+        if message_content_type == JSON_DATA_CONTENT_TYPE:
+            message = self._serialization_registry.deserialize(
+                event.data, type_name=message_type, data_content_type=message_content_type
+            )
+        else:
+            raise ValueError(f"Unsupported message content type: {message_content_type}")
+
+        topic_type_suffix = topic_id.type.split(":", maxsplit=1)[1] if ":" in topic_id.type else ""
+        is_rpc = topic_type_suffix == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
+        is_marked_rpc_type = (
+            _constants.MESSAGE_KIND_ATTR in event_attributes
+            and event_attributes[_constants.MESSAGE_KIND_ATTR] == _constants.MESSAGE_KIND_VALUE_RPC_REQUEST
+        )
+        if is_rpc and not is_marked_rpc_type:
+            warnings.warn("Received RPC request with topic type suffix but not marked as RPC request.", stacklevel=2)
+
+        responses: List[Awaitable[Any]] = []
+        for agent_id in recipients:
+            if agent_id == sender:
+                continue
+            message_context = MessageContext(
+                sender=sender,
+                topic_id=topic_id,
+                is_rpc=is_rpc,
+                cancellation_token=CancellationToken(),
+                message_id=event.id,
+            )
+            agent = await self._agent_manager.get_agent(agent_id)
+            with MessageHandlerContext.populate_context(agent.id):
+
+                def stringify_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str]:
+                    result: Dict[str, str | None] = {}
+                    for key, value in attributes.items():
+                        if isinstance(value, str):
+                            result[key] = value
+                        elif value is None:
+                            result[key] = None
+                        else:
+                            result[key] = str(value)
+                    return result
+
+                async def send_message(agent: Agent, msg_ctx: MessageContext) -> Any:
+                    with self._trace_helper.trace_block("process",
+                                                        agent.id,
+                                                        parent=stringify_attributes(event.attributes),
+                                                        extraAttributes={"message_type": message_type}):
+                        await agent.on_message(message, ctx=msg_ctx)
+
+                future = send_message(agent, message_context)
+            responses.append(future)
+        
+        # Wait for all responses.
+        try:
+            result = await asyncio.gather(*responses, return_exceptions=True)
+            for res in result:
+                if isinstance(res, Exception):
+                    logger.error("Error processing event", exc_info=res)
+        except BaseException as e:
+            logger.error("Error handling event", exc_info=e)
+    
+    async def process_request(self, request: Message, send: Send) -> None:
+        """Process an incoming request message, invoke the agent, and send a response."""
+        recipient = request.recipient
+        sender = request.agent_id
+        if sender is None:
+            logger.info(f"Processing request from unknown source to {recipient}")
+        else:
+            logger.info(f"Processing request from {sender} to {recipient}")
+
+        # Deserialize the message payload
+        message = self._serialization_registry.deserialize(
+            request.payload,
+            type_name=request.payload_type,
+            data_content_type=request.payload_format,
+        )
+
+        # Get the recipient agent
+        rec_agent = await self._agent_manager.get_agent(recipient)
+        message_context = MessageContext(
+            sender=sender,
+            topic_id=None,
+            is_rpc=True,
+            cancellation_token=CancellationToken(),
+            message_id=request.request_id,
+        )
+
+        try:
+            with MessageHandlerContext.populate_context(rec_agent.id):
+                with self._trace_helper.trace_block(
+                    "process",
+                    rec_agent.id,
+                    parent=request.metadata,
+                    attributes={"request_id": request.request_id},
+                    extraAttributes={"message_type": request.payload_type},
+                ):
+                    result = await rec_agent.on_message(message, ctx=message_context)
+        except BaseException as e:
+            # Send error response if agent processing fails
+            response_message = Message(
+                request_id=request.request_id,
+                error=str(e),
+                metadata=get_telemetry_grpc_metadata()
+            )
+            await send(
+                topic=self._config.response_topic,
+                value=response_message.to_dict(),
+                key=recipient,
+                serializer=EventSerializer()
+            )
+            return
+
+        # Serialize and send the successful response
+        result_type = self._serialization_registry.type_name(result)
+        serialized_result = self._serialization_registry.serialize(
+            result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
+        )
+
+        response_message = Message(
+            message_type=MessageType.RESPONSE,
+            request_id=request.request_id,
+            payload=serialized_result,
+            payload_type=result_type,
+            payload_format=JSON_DATA_CONTENT_TYPE,
+            agent_id=rec_agent.id,
+            recipient=sender,
+            metadata=get_telemetry_grpc_metadata(),
+        )
+        try:
+            await send(
+                topic=self._config.request_topic,
+                value=response_message,
+                key=recipient.__str__(),
+                serializer=EventSerializer(),
+                headers={}
+            )
+        except Exception as e:
+            logger.error(f"Failed to send response message: {e}")
+            raise RuntimeError(f"Failed to send response: {e}") from e
+    
+    def process_response(self, response: Message, pending_requests: Dict[str, Future[Any]]) -> None:
+        """Process an incoming response message and complete the corresponding future."""
+        with self._trace_helper.trace_block(
+            "ack",
+            None,
+            parent=response.metadata,
+            attributes={"request_id": response.request_id},
+            extraAttributes={"message_type": response.payload_format},
+        ):
+            result = self._serialization_registry.deserialize(
+                response.payload,
+                type_name=response.payload_type,
+                data_content_type=response.payload_format,
+            )
+            future = pending_requests.pop(response.request_id)
+            if response.error and len(response.error) > 0:
+                future.set_exception(Exception(response.error))
+            else:
+                future.set_result(result) 
