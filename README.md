@@ -19,6 +19,8 @@ A scalable, event-driven runtime extension for [Microsoft AutoGen](https://githu
 
 ```
 autogen-kafka/
+├── .github/                             # GitHub workflows and settings
+│   └── CODEOWNERS                       # Code ownership configuration
 ├── python/                              # Main Python workspace
 │   ├── packages/
 │   │   └── autogen-kafka-extension/     # Core extension package
@@ -27,7 +29,9 @@ autogen-kafka/
 │   │       │       ├── worker_runtime.py           # Main runtime implementation
 │   │       │       ├── worker_config.py            # Configuration classes
 │   │       │       ├── streaming_service.py        # Kafka streaming service
+│   │       │       ├── streaming_worker_base.py    # Base streaming worker
 │   │       │       ├── message_processor.py        # Message processing logic
+│   │       │       ├── messaging_client.py         # Kafka messaging client
 │   │       │       ├── agent_registry.py           # Agent registration management
 │   │       │       ├── agent_manager.py            # Agent lifecycle management
 │   │       │       ├── subscription_service.py     # Subscription management
@@ -36,17 +40,24 @@ autogen-kafka/
 │   │       │       ├── constants.py                # Shared constants
 │   │       │       ├── events/                     # Event handling and serialization
 │   │       │       │   ├── message_serdes.py       # Message serialization/deserialization
-│   │       │       │   ├── message.py              # Message data structures
-│   │       │       │   ├── subscription_evt.py     # Subscription events
-│   │       │       │   └── registration.py         # Registration events
+│   │       │       │   ├── request_event.py        # Request event structures
+│   │       │       │   ├── response_event.py       # Response event structures
+│   │       │       │   ├── subscription_event.py   # Subscription events
+│   │       │       │   └── registration_event.py   # Registration events
+│   │       │       ├── __init__.py                 # Package initialization
 │   │       │       └── py.typed                    # Type hints marker
 │   │       ├── tests/                   # Package tests
 │   │       │   ├── test_worker_runtime.py
-│   │       │   └── utils.py
+│   │       │   ├── utils.py
+│   │       │   └── __init__.py
+│   │       ├── run_tests.sh            # Test runner script
 │   │       └── pyproject.toml          # Package configuration
-│   ├── pyproject.toml                   # Python workspace configuration
+│   ├── assets/                         # Project assets (empty)
+│   ├── docker-compose.yml              # Kafka development environment
+│   ├── pyproject.toml                  # Python workspace configuration
 │   ├── uv.lock                         # Dependency lock file
 │   ├── shared_tasks.toml               # Shared task configuration
+│   ├── LICENSE                         # Apache 2.0 License
 │   └── README.md                       # Detailed implementation guide
 ├── pyproject.toml                       # Root project metadata
 ├── service.yml                          # Service configuration
@@ -87,11 +98,12 @@ uv sync --all-extras
 
 ### 2. Kafka Setup
 
-Ensure your Kafka cluster is running. For local development:
+Ensure your Kafka cluster is running. For local development, you can use the provided Docker Compose configuration:
 
 ```bash
-# Using Docker Compose (example)
-docker-compose up -d kafka zookeeper
+# Navigate to the python directory and start Kafka
+cd python
+docker-compose up -d
 ```
 
 Or use a managed Kafka service like Confluent Cloud.
@@ -141,9 +153,20 @@ await runtime.publish_message(
 
 ### Running Tests
 
+To run the tests, you have several options:
+
 ```bash
+# From the root directory
+cd python/packages/autogen-kafka-extension
+./run_tests.sh
+
+# Or manually with proper PYTHONPATH
+cd python/packages/autogen-kafka-extension
+PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py
+
+# Or run all tests from the python workspace
 cd python
-uv run pytest
+uv run pytest packages/autogen-kafka-extension/tests/
 ```
 
 ### Development Setup
