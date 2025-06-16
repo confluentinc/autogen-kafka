@@ -20,7 +20,7 @@ from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
-class AgentClient(StreamingWorkerBase):
+class MessagingClient(StreamingWorkerBase):
 
     def __init__(self,
                  config: WorkerConfig,
@@ -30,7 +30,7 @@ class AgentClient(StreamingWorkerBase):
                  serialization_registry: SerializationRegistry = SerializationRegistry()
                  ) -> None:
         super().__init__(config=config,
-                         name="AgentClient",
+                         name="MessagingClient",
                          topic=config.response_topic,
                          trace_helper=trace_helper,
                          tracer_provider=tracer_provider,

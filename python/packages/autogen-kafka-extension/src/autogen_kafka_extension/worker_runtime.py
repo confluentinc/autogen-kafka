@@ -6,13 +6,13 @@ from typing import Dict, Callable, Awaitable, TypeVar, Any, Sequence, Mapping, T
 
 from autogen_core import (
     AgentRuntime, Agent, AgentId, Subscription, TopicId, CancellationToken,
-    JSON_DATA_CONTENT_TYPE, AgentType, AgentMetadata, MessageSerializer,
+    AgentType, AgentMetadata, MessageSerializer,
 )
 from cloudevents.pydantic import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.agent_client import AgentClient
+from autogen_kafka_extension.messaging_client import MessagingClient
 from autogen_kafka_extension.agent_registry import AgentRegistry
 from autogen_kafka_extension.agent_manager import AgentManager
 from autogen_kafka_extension.events.request_event import RequestEvent
@@ -50,7 +50,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
                                                              streaming=self._streaming_service)
         self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
                                                                           streaming_service=self._streaming_service)
-        self._agent_client : AgentClient = AgentClient(config=self._config,
+        self._agent_client : MessagingClient = MessagingClient(config=self._config,
                                                        streaming_service=self._streaming_service,
                                                        serialization_registry=self._serialization_registry,
                                                        trace_helper=self._trace_helper)
