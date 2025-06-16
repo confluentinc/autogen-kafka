@@ -136,7 +136,7 @@ class AgentRegistry(StreamingWorkerBase):
         """
         message = RegistrationEvent(message_type=message_type, agent=agent_key)
         
-        await self._send_message(
+        await self.send_message(
             topic=self._config.registry_topic,
             message=message,
             recipient=agent_key

@@ -63,10 +63,6 @@ class SubscriptionService(StreamingWorkerBase):
         """Get all subscriptions tracked globally."""
         return self._global_subscriptions._subscriptions
 
-    def is_started(self) -> bool:
-        """Check if the service is currently started."""
-        return self._is_started
-
     async def add_subscription(self, subscription: Subscription) -> None:
         """Add a new subscription and broadcast to other service instances."""
         self._validate_subscription(subscription)
@@ -126,7 +122,7 @@ class SubscriptionService(StreamingWorkerBase):
         """Broadcast subscription event to other service instances."""
         event = SubscriptionEvent(subscription=subscription, operation=operation)
 
-        await self._streaming_service.send(
+        await self._service_manager.service.send(
             topic=self._config.subscription_topic,
             value=event,
             headers={},

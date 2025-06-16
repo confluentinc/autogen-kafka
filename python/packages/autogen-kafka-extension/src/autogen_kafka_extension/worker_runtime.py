@@ -45,13 +45,13 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
 
         # Kafka components
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,
-                                                             streaming_service=self._streaming_service,
+                                                             streaming_service=self._service_manager.service,
                                                              trace_helper=self._trace_helper)
         self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
-                                                                          streaming_service=self._streaming_service,
+                                                                          streaming_service=self._service_manager.service,
                                                                           trace_helper=self._trace_helper)
         self._messaging_client : MessagingClient = MessagingClient(config=self._config,
-                                                                   streaming_service=self._streaming_service,
+                                                                   streaming_service=self._service_manager.service,
                                                                    serialization_registry=self._serialization_registry,
                                                                    trace_helper=self._trace_helper)
 
@@ -72,7 +72,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
 
     async def start(self) -> None:
         """Start the Kafka stream processing engine and subscribe to topics."""
-        if self.is_started():
+        if self.is_started:
             return
 
         logger.info("Starting runtime...")
@@ -87,7 +87,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
 
     async def stop(self) -> None:
         """Stop the Kafka stream processing engine and wait for background tasks to finish."""
-        if not self.is_started():
+        if not self.is_started:
             return
 
         logger.info("Stopping subscription service and Kafka stream engine...")

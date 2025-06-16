@@ -53,8 +53,8 @@ class MessagingClient(StreamingWorkerBase):
         message_id: str | None = None
     ) -> Any:
         """Send a message to a specific agent via Kafka and await a response."""
-        if not self._is_started:
-            raise RuntimeError(f"{self._name} is not started. Call start() before publishing messages.")
+        if not self.is_started:
+            raise RuntimeError(f"{self.name} is not started. Call start() before publishing messages.")
 
         if message_id is None:
             message_id = str(uuid.uuid4())
@@ -92,7 +92,7 @@ class MessagingClient(StreamingWorkerBase):
 
             # Send the message in the background
             self._background_task_manager.add_task(
-                self._send_message(
+                super().send_message(
                     message = msg,
                     topic = self._config.request_topic,
                     recipient=recipient)
@@ -109,8 +109,8 @@ class MessagingClient(StreamingWorkerBase):
         message_id: str | None = None,
     ) -> None:
         """Publish a message to a Kafka topic (broadcast)."""
-        if not self.is_started():
-            raise RuntimeError(f"{self._name} is not started. Call start() before publishing messages.")
+        if not self.is_started:
+            raise RuntimeError(f"{self.name} is not started. Call start() before publishing messages.")
         if message_id is None:
             message_id = str(uuid.uuid4())
 
@@ -148,11 +148,11 @@ class MessagingClient(StreamingWorkerBase):
 
             # Send the message in the background
             self._background_task_manager.add_task(
-                self._send_message(
+                super().send_message(
                     message=cloud_evt,
                     topic=self._config.request_topic,
                     recipient=topic_id)
-            )
+                )
 
     async def _get_new_request_id(self) -> str:
         """Generate a new unique request ID for correlating requests and responses."""

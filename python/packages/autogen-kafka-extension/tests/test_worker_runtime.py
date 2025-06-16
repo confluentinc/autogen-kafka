@@ -152,7 +152,7 @@ async def test_disconnected_agent() -> None:
 
             await worker1.publish_message(ContentMessage(content="Hello!"), DefaultTopicId())
             # This is a simple simulation of worker disconnect
-            if worker1.is_started() is not None:  # type: ignore[reportPrivateUsage]
+            if worker1.is_started is not None:  # type: ignore[reportPrivateUsage]
                 try:
                     await worker1.stop()  # type: ignore[reportPrivateUsage]
                 except asyncio.CancelledError:
