@@ -1,22 +1,9 @@
 import base64
-from enum import Enum
-from mailbox import Message
 from typing import Any
 
 from autogen_core import AgentId, TopicId
 
-class MessageType(Enum):
-    PUBLISH = "publish"
-    SEND = "send"
-    REQUEST = "request"
-    RESPONSE = "response"
-    ERROR = "error"
-
-class  Message(object):
-
-    @property
-    def message_type(self) -> MessageType:
-        return self._message_type
+class RequestEvent(object):
 
     @property
     def agent_id(self) -> AgentId | None:
@@ -59,7 +46,6 @@ class  Message(object):
         return self._error
 
     def __init__(self,
-                 message_type: MessageType | None = None,
                  message_id: str | None = None,
                  agent_id: AgentId | None = None,
                  topic_id: TopicId | None = None,
@@ -71,8 +57,6 @@ class  Message(object):
                  metadata: dict[str, Any] | None = None,
                  error: str | None = None,
                  values: dict[str, Any] | None = None):
-        if message_type is None:
-            raise ValueError("message_type must be provided.")
         self._agent_id : AgentId | None = agent_id
         self._message_id: str | None = message_id
         self._request_id: str | None = request_id
@@ -81,7 +65,6 @@ class  Message(object):
         self._payload_format: str | None = payload_format
         self._topic_id: TopicId | None = topic_id
         self._recipient: AgentId | None = recipient
-        self._message_type: MessageType = message_type
         self._metadata: dict[str, Any] | None = metadata
         self._error: str | None = error
 
@@ -89,7 +72,6 @@ class  Message(object):
     def to_dict(self) -> dict[str, Any]:
         """Convert the Message object to a dictionary."""
         return {
-            "message_type": self._message_type.value,
             "message_id": self._message_id,
             "topic_id": self._topic_id.__str__() if self._topic_id else None,
             "agent_id": self._agent_id.__str__() if self._agent_id else None,
@@ -103,9 +85,8 @@ class  Message(object):
         }
 
     @classmethod
-    def from_dict(cls, message_dict: dict[str, Any]) -> Message:
+    def from_dict(cls, message_dict: dict[str, Any]) -> 'RequestEvent':
         # Parse enums and objects from their string representations
-        message_type = MessageType(message_dict["message_type"])
         message_id = message_dict.get("message_id")
         agent_id = AgentId.from_str(message_dict["agent_id"]) if message_dict.get("agent_id") else None
         topic_id = TopicId.from_str(message_dict["topic_id"]) if message_dict.get("topic_id") else None
@@ -118,7 +99,6 @@ class  Message(object):
         error = message_dict.get("error")
 
         return cls(
-            message_type=message_type,
             message_id=message_id,
             agent_id=agent_id,
             topic_id=topic_id,

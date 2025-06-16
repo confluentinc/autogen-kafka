@@ -2,7 +2,6 @@ import logging
 from typing import Optional, Dict
 
 from aiokafka import ConsumerRecord
-from autogen_core import Subscription
 from cloudevents.pydantic import CloudEvent
 from kstreams import middleware
 
@@ -11,8 +10,9 @@ import json
 from kstreams.serializers import Serializer
 
 from autogen_kafka_extension.constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension.events.message import Message
+from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.registration import RegistrationMessage
+from autogen_kafka_extension.events.response_event import ResponseEvent
 from autogen_kafka_extension.events.subscription_evt import SubscriptionEvt
 
 
@@ -53,10 +53,10 @@ class EventDeserializer(middleware.BaseMiddleware):
 
             try:
                 # Wrap the parsed data in a Message object
-                if evt_type == Message.__name__:
+                if evt_type == RequestEvent.__name__:
                     # If the event type is Message, create a Message instance
                     values = json.loads(cr.value)
-                    cr.value = Message.from_dict(values)
+                    cr.value = RequestEvent.from_dict(values)
                 elif evt_type == RegistrationMessage.__name__:
                     # If the event type is RegistrationMessage, create a RegistrationMessage instance
                     values = json.loads(cr.value)
@@ -65,6 +65,10 @@ class EventDeserializer(middleware.BaseMiddleware):
                     # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
                     values = json.loads(cr.value)
                     cr.value = SubscriptionEvt.from_dict(values)
+                elif evt_type == ResponseEvent.__name__:
+                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
+                    values = json.loads(cr.value)
+                    cr.value = ResponseEvent.from_dict(values)
                 elif evt_type == CloudEvent.__name__:
                     cr.value = CloudEvent(attributes=headers, data=cr.value)
             except ValueError as e:
@@ -117,9 +121,10 @@ class EventSerializer(Serializer):
             headers[EVENT_TYPE_ATTR] = CloudEvent.__name__
 
             return result
-        elif (not isinstance(payload, Message) and
+        elif (not isinstance(payload, RequestEvent) and
               not isinstance(payload, RegistrationMessage) and
-              not isinstance(payload, SubscriptionEvt)):
+              not isinstance(payload, SubscriptionEvt) and
+              not isinstance(payload, ResponseEvent)):
             raise RuntimeError(f"Unsupported payload type: {type(payload)}")
 
         try:

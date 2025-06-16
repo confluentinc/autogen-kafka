@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Dict
 
-from autogen_core import AgentId, AgentType
+from autogen_core import AgentType
 
 
 class RegistrationMessageType(Enum):

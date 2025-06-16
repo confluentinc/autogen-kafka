@@ -22,7 +22,8 @@ async def test_agent_types_must_be_unique_single_worker() -> None:
         config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
                                               request_topic="request",
                                               subscription_topic="subscription",
-                                              registry_topic="communication",
+                                              registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -53,6 +54,7 @@ async def test_agent_types_must_be_unique_multiple_workers() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -62,6 +64,7 @@ async def test_agent_types_must_be_unique_multiple_workers() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -99,6 +102,7 @@ async def test_disconnected_agent() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -108,6 +112,7 @@ async def test_disconnected_agent() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -193,6 +198,7 @@ async def test_agent_type_register_instance() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -230,6 +236,7 @@ async def test_agent_type_register_instance_different_types() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -260,6 +267,7 @@ async def test_register_instance_factory() -> None:
                                               request_topic="request",
                                               subscription_topic="subscription",
                                               registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -290,6 +298,7 @@ async def test_instance_factory_messaging() -> None:
         config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
                                               request_topic="request",
                                               subscription_topic="subscription",
+                                              response_topic="response",
                                               registry_topic="registry",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
@@ -317,7 +326,7 @@ async def test_instance_factory_messaging() -> None:
             await worker.publish_message(
                 CascadingMessageType(round=i + 1), TopicId(type="instance_agent", source="instance_agent")
             )
-        await asyncio.sleep(2)
+        await asyncio.sleep(5)
 
         agent = await worker.try_get_underlying_agent_instance(AgentId("factory_agent", "default"), CascadingAgent)
         assert agent.num_calls == 4
@@ -333,7 +342,8 @@ async def test_register_receives_publish() -> None:
         config_1: WorkerConfig = WorkerConfig(title="KafkaWorker",
                                               request_topic="request",
                                               subscription_topic="subscription",
-                                              registry_topic="communication",
+                                              registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],
@@ -342,7 +352,8 @@ async def test_register_receives_publish() -> None:
         config_2: WorkerConfig = WorkerConfig(title="KafkaWorker-2",
                                               request_topic="request",
                                               subscription_topic="subscription",
-                                              registry_topic="communication",
+                                              registry_topic="registry",
+                                              response_topic="response",
                                               security_protocol=SecurityProtocol.PLAINTEXT,
                                               security_mechanism=SaslMechanism.PLAIN,
                                               bootstrap_servers=[connection],

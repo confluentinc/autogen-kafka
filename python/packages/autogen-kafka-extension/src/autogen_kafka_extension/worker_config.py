@@ -26,6 +26,7 @@ class WorkerConfig:
                  request_topic: str,
                  subscription_topic: str,
                  registry_topic: str,
+                 response_topic: str,
                  bootstrap_servers: list[str],
                  num_partitions: int | None = 3,
                  replication_factor: int | None = 1,
@@ -46,6 +47,7 @@ class WorkerConfig:
         self._group_id: str | None = group_id
         self._client_id: str | None = client_id
         self._registry_topic: str = registry_topic
+        self._response_topic: str | None = response_topic
         self._num_partitions: int = num_partitions
         self._replication_factor = replication_factor
 
@@ -88,6 +90,14 @@ class WorkerConfig:
         If not set, the worker will not handle registry messages.
         """
         return self._registry_topic
+
+    @property
+    def response_topic(self) -> str | None:
+        """
+        The Kafka topic to produce responses to.
+        If not set, the worker will not produce responses.
+        """
+        return self._response_topic
 
     @property
     def sasl_plain_username(self) -> str | None:

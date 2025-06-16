@@ -1,7 +1,6 @@
 import asyncio
 import logging
 import warnings
-from asyncio import Future
 from typing import Dict, Any, Awaitable, List, Mapping
 
 from autogen_core import (
@@ -15,7 +14,8 @@ from kstreams import Send
 
 from autogen_kafka_extension import constants
 from autogen_kafka_extension.agent_manager import AgentManager
-from autogen_kafka_extension.events.message import Message, MessageType
+from autogen_kafka_extension.events.request_event import RequestEvent
+from autogen_kafka_extension.events.response_event import ResponseEvent
 from autogen_kafka_extension.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
 from autogen_kafka_extension.events.message_serdes import EventSerializer
@@ -115,7 +115,7 @@ class MessageProcessor:
         except BaseException as e:
             logger.error("Error handling event", exc_info=e)
     
-    async def process_request(self, request: Message, send: Send) -> None:
+    async def process_request(self, request: RequestEvent, send: Send) -> None:
         """Process an incoming request message, invoke the agent, and send a response."""
         recipient = request.recipient
         sender = request.agent_id
@@ -153,7 +153,7 @@ class MessageProcessor:
                     result = await rec_agent.on_message(message, ctx=message_context)
         except BaseException as e:
             # Send error response if agent processing fails
-            response_message = Message(
+            response_message = RequestEvent(
                 request_id=request.request_id,
                 error=str(e),
                 metadata=get_telemetry_grpc_metadata()
@@ -172,19 +172,18 @@ class MessageProcessor:
             result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
         )
 
-        response_message = Message(
-            message_type=MessageType.RESPONSE,
+        response_message = ResponseEvent(
             request_id=request.request_id,
             payload=serialized_result,
             payload_type=result_type,
-            payload_format=JSON_DATA_CONTENT_TYPE,
-            agent_id=rec_agent.id,
+            serialization_format=JSON_DATA_CONTENT_TYPE,
+            sender=rec_agent.id,
             recipient=sender,
             metadata=get_telemetry_grpc_metadata(),
         )
         try:
             await send(
-                topic=self._config.request_topic,
+                topic=self._config.response_topic,
                 value=response_message,
                 key=recipient.__str__(),
                 serializer=EventSerializer(),
@@ -193,23 +192,3 @@ class MessageProcessor:
         except Exception as e:
             logger.error(f"Failed to send response message: {e}")
             raise RuntimeError(f"Failed to send response: {e}") from e
-    
-    def process_response(self, response: Message, pending_requests: Dict[str, Future[Any]]) -> None:
-        """Process an incoming response message and complete the corresponding future."""
-        with self._trace_helper.trace_block(
-            "ack",
-            None,
-            parent=response.metadata,
-            attributes={"request_id": response.request_id},
-            extraAttributes={"message_type": response.payload_format},
-        ):
-            result = self._serialization_registry.deserialize(
-                response.payload,
-                type_name=response.payload_type,
-                data_content_type=response.payload_format,
-            )
-            future = pending_requests.pop(response.request_id)
-            if response.error and len(response.error) > 0:
-                future.set_exception(Exception(response.error))
-            else:
-                future.set_result(result) 
