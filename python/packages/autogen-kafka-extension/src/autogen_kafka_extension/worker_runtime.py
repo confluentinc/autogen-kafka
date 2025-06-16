@@ -16,7 +16,7 @@ from autogen_kafka_extension.agent_client import AgentClient
 from autogen_kafka_extension.agent_registry import AgentRegistry
 from autogen_kafka_extension.agent_manager import AgentManager
 from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.extension_base import ExtensionBase
+from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.message_processor import MessageProcessor
 from autogen_kafka_extension.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
@@ -25,7 +25,7 @@ T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
 
 
-class KafkaWorkerAgentRuntime(ExtensionBase, AgentRuntime):
+class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
     """
     A Kafka worker agent runtime that processes messages from Kafka topics.
     Extends AgentRuntime to provide Kafka-specific functionality for consuming
@@ -39,7 +39,7 @@ class KafkaWorkerAgentRuntime(ExtensionBase, AgentRuntime):
     ) -> None:
         """Initialize a new KafkaWorkerAgentRuntime instance."""
         AgentRuntime.__init__(self)
-        ExtensionBase.__init__(self,
+        StreamingWorkerBase.__init__(self,
                                config = config,
                                name= "KafkaWorkerAgentRuntime",
                                topic=config.request_topic,

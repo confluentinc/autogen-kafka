@@ -14,13 +14,13 @@ from opentelemetry.trace import TracerProvider
 from autogen_kafka_extension import constants
 from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.extension_base import ExtensionBase
+from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.streaming_service import StreamingService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
-class AgentClient(ExtensionBase):
+class AgentClient(StreamingWorkerBase):
 
     def __init__(self,
                  config: WorkerConfig,
