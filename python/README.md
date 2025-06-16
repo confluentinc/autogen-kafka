@@ -171,14 +171,14 @@ config = WorkerConfig(
 The package includes comprehensive test coverage using:
 
 ```bash
+cd packages/autogen-kafka-extension
+
 # Run all tests
-uv run pytest
+PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py
 
 # Run with coverage
-uv run pytest --cov=autogen_kafka_extension
+PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py --cov=autogen_kafka_extension
 
-# Run integration tests (requires Kafka)
-uv run pytest tests/integration/
 ```
 
 ### Debugging and Monitoring

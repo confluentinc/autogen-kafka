@@ -20,7 +20,6 @@ dependencies = [
     "autogen-core>=0.6.1",
     "autogen>=0.1.0",
     "hatchling>=1.27.0",
-    "kafka-python>=2.0.2",
     "kstreams>=0.26.9",
     "pyautogen>=0.9",
     "confluent-kafka>=2.10.1",
