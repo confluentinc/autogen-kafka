@@ -1,20 +1,23 @@
 import logging
 from typing import List, Optional
-from contextlib import asynccontextmanager
 
 from autogen_core import Subscription, AgentId, TopicId
 from autogen_core._runtime_impl_helpers import SubscriptionManager
-from kstreams import ConsumerRecord
+from autogen_core._serialization import SerializationRegistry
+from autogen_core._telemetry import TraceHelper
+from kstreams import ConsumerRecord, Stream, Send
+from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.streaming_service import StreamingService
 from autogen_kafka_extension.events.message_serdes import EventSerializer
-from autogen_kafka_extension.events.subscription_evt import SubscriptionEvt, SubscriptionEvtOp
+from autogen_kafka_extension.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
+from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class SubscriptionService:
+class SubscriptionService(StreamingWorkerBase):
     """
     Service for managing agent subscriptions with distributed coordination via Kafka.
     
@@ -33,15 +36,20 @@ class SubscriptionService:
         """Get the global subscription manager tracking all service instances."""
         return self._global_subscriptions
 
-    def __init__(self, config: WorkerConfig, streaming_service: Optional[StreamingService] = None) -> None:
+    def __init__(self,
+                 config: WorkerConfig,
+                 streaming_service: Optional[StreamingService] = None,
+                 trace_helper: TraceHelper | None = None,
+                 tracer_provider: TracerProvider | None = None,
+                 serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
+        super().__init__(config = config,
+                         topic=config.subscription_topic,
+                         trace_helper=trace_helper,
+                         tracer_provider=tracer_provider,
+                         streaming_service=streaming_service,
+                         serialization_registry=serialization_registry)
         self._local_subscriptions = SubscriptionManager()
         self._global_subscriptions = SubscriptionManager()
-        self._config = config
-        self._streaming_service = streaming_service or StreamingService(config)
-        self._owns_streaming_service = streaming_service is None
-        self._is_started = False
-
-        self._setup_subscription_event_stream()
 
     async def get_local_recipients(self, topic_id: TopicId) -> List[AgentId]:
         """Get recipients subscribed to a topic on this service instance."""
@@ -58,41 +66,6 @@ class SubscriptionService:
     def is_started(self) -> bool:
         """Check if the service is currently started."""
         return self._is_started
-
-    async def start(self) -> None:
-        """Start the subscription service."""
-        if not self._owns_streaming_service:
-            raise RuntimeError("Cannot start SubscriptionService when using external StreamingService")
-        
-        if self._is_started:
-            logger.warning("SubscriptionService is already started")
-            return
-
-        await self._streaming_service.start()
-        self._is_started = True
-        logger.info("SubscriptionService started")
-
-    async def stop(self) -> None:
-        """Stop the subscription service."""
-        if not self._owns_streaming_service:
-            raise RuntimeError("Cannot stop SubscriptionService when using external StreamingService")
-        
-        if not self._is_started:
-            logger.warning("SubscriptionService is already stopped")
-            return
-
-        await self._streaming_service.stop()
-        self._is_started = False
-        logger.info("SubscriptionService stopped")
-
-    @asynccontextmanager
-    async def lifecycle(self):
-        """Context manager for service lifecycle management."""
-        await self.start()
-        try:
-            yield self
-        finally:
-            await self.stop()
 
     async def add_subscription(self, subscription: Subscription) -> None:
         """Add a new subscription and broadcast to other service instances."""
@@ -145,27 +118,13 @@ class SubscriptionService:
         if not subscription.id:
             raise ValueError("Subscription ID cannot be empty")
 
-    def _setup_subscription_event_stream(self) -> None:
-        """Configure the Kafka stream for subscription events."""
-        stream_name = f"{self._config.title}_subscription_events"
-        group_id = f"{self._config.group_id}_subscription_events"
-        client_id = f"{self._config.client_id}_subscription_events"
-        
-        self._streaming_service.create_and_add_stream(
-            name=stream_name,
-            topics=[self._config.subscription_topic],
-            group_id=group_id,
-            client_id=client_id,
-            func=self._handle_subscription_event
-        )
-
     async def _broadcast_subscription_event(
         self,
         operation: SubscriptionEvtOp,
         subscription: Subscription | str,
     ) -> None:
         """Broadcast subscription event to other service instances."""
-        event = SubscriptionEvt(subscription=subscription, operation=operation)
+        event = SubscriptionEvent(subscription=subscription, operation=operation)
 
         await self._streaming_service.send(
             topic=self._config.subscription_topic,
@@ -174,9 +133,9 @@ class SubscriptionService:
             serializer=EventSerializer()
         )
 
-    async def _handle_subscription_event(self, record: ConsumerRecord) -> None:
+    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
         """Process incoming subscription events from other service instances."""
-        if not isinstance(record.value, SubscriptionEvt):
+        if not isinstance(record.value, SubscriptionEvent):
             logger.error(f"Received invalid subscription event type: {type(record.value)}")
             return
 

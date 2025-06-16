@@ -11,9 +11,9 @@ from kstreams.serializers import Serializer
 
 from autogen_kafka_extension.constants import EVENT_TYPE_ATTR
 from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.events.registration import RegistrationMessage
+from autogen_kafka_extension.events.registration_event import RegistrationEvent
 from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.events.subscription_evt import SubscriptionEvt
+from autogen_kafka_extension.events.subscription_event import SubscriptionEvent
 
 
 class EventDeserializer(middleware.BaseMiddleware):
@@ -57,14 +57,14 @@ class EventDeserializer(middleware.BaseMiddleware):
                     # If the event type is Message, create a Message instance
                     values = json.loads(cr.value)
                     cr.value = RequestEvent.from_dict(values)
-                elif evt_type == RegistrationMessage.__name__:
+                elif evt_type == RegistrationEvent.__name__:
                     # If the event type is RegistrationMessage, create a RegistrationMessage instance
                     values = json.loads(cr.value)
-                    cr.value = RegistrationMessage.from_dict(values)
-                elif evt_type == SubscriptionEvt.__name__:
+                    cr.value = RegistrationEvent.from_dict(values)
+                elif evt_type == SubscriptionEvent.__name__:
                     # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
                     values = json.loads(cr.value)
-                    cr.value = SubscriptionEvt.from_dict(values)
+                    cr.value = SubscriptionEvent.from_dict(values)
                 elif evt_type == ResponseEvent.__name__:
                     # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
                     values = json.loads(cr.value)
@@ -122,8 +122,8 @@ class EventSerializer(Serializer):
 
             return result
         elif (not isinstance(payload, RequestEvent) and
-              not isinstance(payload, RegistrationMessage) and
-              not isinstance(payload, SubscriptionEvt) and
+              not isinstance(payload, RegistrationEvent) and
+              not isinstance(payload, SubscriptionEvent) and
               not isinstance(payload, ResponseEvent)):
             raise RuntimeError(f"Unsupported payload type: {type(payload)}")
 

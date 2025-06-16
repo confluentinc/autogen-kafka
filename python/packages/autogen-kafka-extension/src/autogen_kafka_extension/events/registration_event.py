@@ -8,7 +8,7 @@ class RegistrationMessageType(Enum):
     REGISTER = "register"
     UNREGISTER = "unregister"
 
-class RegistrationMessage(object):
+class RegistrationEvent(object):
 
     @property
     def message_type(self) -> RegistrationMessageType:
@@ -29,7 +29,7 @@ class RegistrationMessage(object):
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> 'RegistrationMessage':
+    def from_dict(cls, data: Dict[str, str]) -> 'RegistrationEvent':
         return cls(
             message_type=RegistrationMessageType(data["message_type"]),
             agent= data["agent"]

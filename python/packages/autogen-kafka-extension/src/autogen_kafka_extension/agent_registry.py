@@ -1,18 +1,21 @@
 import logging
-from typing import Dict, Union
+from typing import Dict, Union, Optional
 
 from autogen_core import AgentType
+from autogen_core._serialization import SerializationRegistry
+from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
+from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.events.message_serdes import EventSerializer
-from autogen_kafka_extension.events.registration import RegistrationMessage, RegistrationMessageType
+from autogen_kafka_extension.events.registration_event import RegistrationEvent, RegistrationMessageType
 from autogen_kafka_extension.streaming_service import StreamingService
+from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class AgentRegistry:
+class AgentRegistry(StreamingWorkerBase):
     """
     A registry for agents that can be used to manage and retrieve agents.
     
@@ -20,24 +23,20 @@ class AgentRegistry:
     allowing multiple workers to coordinate agent availability.
     """
 
-    def __init__(self, config: WorkerConfig, streaming: StreamingService | None = None) -> None:
-        self._agents: Dict[str, Union[str, AgentType]] = {}
-        self._started: bool = False
-        self._config = config
-        self._streaming = streaming if streaming else StreamingService(config)
-        
-        # Set up the registration stream
-        self._setup_registration_stream()
+    def __init__(self,
+                 config: WorkerConfig,
+                 streaming_service: Optional[StreamingService] = None,
+                 trace_helper: TraceHelper | None = None,
+                 tracer_provider: TracerProvider | None = None,
+                 serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
+        super().__init__(config = config,
+                         topic=config.registry_topic,
+                         trace_helper=trace_helper,
+                         tracer_provider=tracer_provider,
+                         streaming_service=streaming_service,
+                         serialization_registry=serialization_registry)
 
-    def _setup_registration_stream(self) -> None:
-        """Set up the Kafka stream for agent registration messages."""
-        self._streaming.create_and_add_stream(
-            name=f"{self._config.title}_reg",
-            topics=[self._config.registry_topic],
-            group_id=f"{self._config.group_id}_reg",
-            client_id=f"{self._config.client_id}_reg",
-            func=self._on_record
-        )
+        self._agents: Dict[str, Union[str, AgentType]] = {}
 
     def _extract_agent_key(self, agent: Union[str, AgentType]) -> str:
         """Extract the string key from an agent identifier."""
@@ -135,30 +134,28 @@ class AgentRegistry:
             message_type: The type of registration message
             agent_key: The key of the agent
         """
-        message = RegistrationMessage(message_type=message_type, agent=agent_key)
+        message = RegistrationEvent(message_type=message_type, agent=agent_key)
         
-        await self._streaming.send(
+        await self._send_message(
             topic=self._config.registry_topic,
-            value=message,
-            key=agent_key,
-            headers={},
-            serializer=EventSerializer()
+            message=message,
+            recipient=agent_key
         )
 
-    async def _on_record(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
         """
         Handle incoming registration messages from other workers.
         
         Args:
-            cr: The consumer record containing the registration message
+            record: The consumer record containing the registration message
             stream: The Kafka stream
             send: The send function for producing messages
         """
-        if not isinstance(cr.value, RegistrationMessage):
-            logger.error(f"Received invalid message type: {type(cr.value)}")
+        if not isinstance(record.value, RegistrationEvent):
+            logger.error(f"Received invalid message type: {type(record.value)}")
             return
 
-        message = cr.value
+        message = record.value
         agent_key = message.agent
 
         try:

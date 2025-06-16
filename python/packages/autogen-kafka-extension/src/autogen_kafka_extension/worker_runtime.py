@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import uuid
 from asyncio import Future
 from typing import Dict, Callable, Awaitable, TypeVar, Any, Sequence, Mapping, Type
 
@@ -41,19 +40,20 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         AgentRuntime.__init__(self)
         StreamingWorkerBase.__init__(self,
                                config = config,
-                               name= "KafkaWorkerAgentRuntime",
                                topic=config.request_topic,
                                tracer_provider=tracer_provider)
 
         # Kafka components
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,
-                                                             streaming=self._streaming_service)
+                                                             streaming_service=self._streaming_service,
+                                                             trace_helper=self._trace_helper)
         self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
-                                                                          streaming_service=self._streaming_service)
-        self._agent_client : MessagingClient = MessagingClient(config=self._config,
-                                                       streaming_service=self._streaming_service,
-                                                       serialization_registry=self._serialization_registry,
-                                                       trace_helper=self._trace_helper)
+                                                                          streaming_service=self._streaming_service,
+                                                                          trace_helper=self._trace_helper)
+        self._messaging_client : MessagingClient = MessagingClient(config=self._config,
+                                                                   streaming_service=self._streaming_service,
+                                                                   serialization_registry=self._serialization_registry,
+                                                                   trace_helper=self._trace_helper)
 
         # Component managers
         self._agent_manager = AgentManager(self)
@@ -70,14 +70,34 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
+    async def start(self) -> None:
+        """Start the Kafka stream processing engine and subscribe to topics."""
+        if self.is_started():
+            return
+
+        logger.info("Starting runtime...")
+
+        # Start all services
+        await self._subscription_svc.start()
+        await self._messaging_client.start()
+        await self._agent_registry.start()
+
+        # Start the streaming service
+        await super().start()
 
     async def stop(self) -> None:
         """Stop the Kafka stream processing engine and wait for background tasks to finish."""
-        if not self.is_started:
+        if not self.is_started():
             return
 
         logger.info("Stopping subscription service and Kafka stream engine...")
         await self._subscription_svc.unsubscribe_all()
+
+
+        # Stop all services
+        await self._messaging_client.stop()
+        await self._agent_registry.stop()
+        await self._subscription_svc.stop()
 
         await super().stop()
 
@@ -90,7 +110,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None
     ) -> Any:
-        return await self._agent_client.send_message(
+        return await self._messaging_client.send_message(
             message=message,
             recipient=recipient,
             sender=sender,
@@ -107,7 +127,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None,
     ) -> None:
-        await self._agent_client.publish_message(
+        await self._messaging_client.publish_message(
             message=message,
             topic_id=topic_id,
             sender=sender,

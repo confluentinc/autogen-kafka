@@ -104,7 +104,7 @@ class StringSubscriptionSerializer:
         return data["subscription"]
 
 
-class SubscriptionEvt:
+class SubscriptionEvent:
     """
     SubscriptionEvt represents an event related to a subscription.
     It handles serialization/deserialization of different subscription types
@@ -166,7 +166,7 @@ class SubscriptionEvt:
         raise ValueError(f"Unsupported subscription type: {type(self._subscription)}")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SubscriptionEvt':
+    def from_dict(cls, data: Dict[str, Any]) -> 'SubscriptionEvent':
         """
         Create a SubscriptionEvt from a dictionary representation.
 
@@ -174,7 +174,7 @@ class SubscriptionEvt:
             data: A dictionary representation of the SubscriptionEvt
 
         Returns:
-            SubscriptionEvt: An instance of SubscriptionEvt
+            SubscriptionEvent: An instance of SubscriptionEvt
 
         Raises:
             ValueError: If the subscription type is not supported or data is invalid

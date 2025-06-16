@@ -30,7 +30,6 @@ class MessagingClient(StreamingWorkerBase):
                  serialization_registry: SerializationRegistry = SerializationRegistry()
                  ) -> None:
         super().__init__(config=config,
-                         name="MessagingClient",
                          topic=config.response_topic,
                          trace_helper=trace_helper,
                          tracer_provider=tracer_provider,

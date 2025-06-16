@@ -9,6 +9,7 @@ from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.background_task_manager import BackgroundTaskManager
+from autogen_kafka_extension.events.registration_event import RegistrationEvent
 from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.message_serdes import EventSerializer
 from autogen_kafka_extension.events.response_event import ResponseEvent
@@ -21,8 +22,8 @@ class StreamingWorkerBase:
 
     def __init__(self,
                  config: WorkerConfig,
-                 name: str,
                  topic: str,
+                 name: str = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry(),
                  trace_helper: TraceHelper | None = None,
                  tracer_provider: TracerProvider | None = None,
@@ -31,8 +32,8 @@ class StreamingWorkerBase:
         self._streaming_service = streaming_service or StreamingService(config)
         self._owns_streaming_service = streaming_service is None
         # We assumed that if no streaming service is provided, we own it and can start/stop it.
-        self._is_started = not self._owns_streaming_service
-        self._name = name
+        self._is_started = False
+        self._name = name if name is not None else type(self).__name__
         self._topic = topic
         self._config = config
         self._serialization_registry = serialization_registry
@@ -47,7 +48,8 @@ class StreamingWorkerBase:
     async def start(self) -> None:
         """Start the subscription service."""
         if not self._owns_streaming_service:
-            raise RuntimeError(f"Cannot start {self._name} when using external StreamingService")
+            self._is_started = True
+            return
 
         if self._is_started:
             logger.warning(f"{self._name} is already started")
@@ -60,7 +62,8 @@ class StreamingWorkerBase:
     async def stop(self) -> None:
         """Stop the subscription service."""
         if not self._owns_streaming_service:
-            raise RuntimeError(f"Cannot stop {self._name} when using external StreamingService")
+            self._is_started = False
+            return
 
         if not self._is_started:
             logger.warning(f"{self._name} is already stopped")
@@ -74,9 +77,9 @@ class StreamingWorkerBase:
 
     async def _send_message(
         self,
-        message: RequestEvent | CloudEvent | ResponseEvent,
+        message: RequestEvent | CloudEvent | ResponseEvent | RegistrationEvent,
         topic: str,
-        recipient: AgentId | TopicId = None,
+        recipient: AgentId | TopicId | str = None,
     ) -> None:
         """Send a message to Kafka using the configured stream engine."""
         if not self._is_started:
@@ -86,7 +89,7 @@ class StreamingWorkerBase:
             await self._streaming_service.send(
                 topic=topic,
                 value=message,
-                key=recipient.__str__(),
+                key=recipient if isinstance(recipient, str) else recipient.__str__(),
                 headers={},
                 serializer=EventSerializer()
             )
