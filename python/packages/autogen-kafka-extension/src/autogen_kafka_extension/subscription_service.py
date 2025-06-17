@@ -149,19 +149,6 @@ class SubscriptionService(StreamingWorkerBase):
         except Exception as e:
             logger.error(f"Failed to process subscription event {event}: {e}")
 
-    # Backward compatibility properties (deprecated)
-    @property
-    def subscription_manager(self) -> SubscriptionManager:
-        """Deprecated: Use local_subscriptions instead."""
-        logger.warning("subscription_manager is deprecated, use local_subscriptions")
-        return self._local_subscriptions
-
-    @property
-    def all_subscription_manager(self) -> SubscriptionManager:
-        """Deprecated: Use global_subscriptions instead."""
-        logger.warning("all_subscription_manager is deprecated, use global_subscriptions")
-        return self._global_subscriptions
-
     async def get_subscribed_recipients(self, topic_id: TopicId) -> List[AgentId]:
         """Deprecated: Use get_local_recipients instead."""
         logger.warning("get_subscribed_recipients is deprecated, use get_local_recipients")
