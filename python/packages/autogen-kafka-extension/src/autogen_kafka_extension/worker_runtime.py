@@ -26,9 +26,56 @@ logger = logging.getLogger(__name__)
 
 class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
     """
-    A Kafka worker agent runtime that processes messages from Kafka topics.
-    Extends AgentRuntime to provide Kafka-specific functionality for consuming
-    and processing messages from configured Kafka topics.
+    A Kafka-based agent runtime for distributed multi-agent systems.
+    
+    This class provides a complete implementation of the AgentRuntime interface using
+    Apache Kafka as the underlying messaging infrastructure. It enables distributed
+    agent communication across multiple processes and machines through Kafka topics.
+    
+    Architecture:
+        The runtime is built on several key components:
+        - AgentRegistry: Manages agent discovery and registration across the cluster
+        - SubscriptionService: Handles topic subscriptions and message routing
+        - MessagingClient: Provides high-level messaging APIs for agents
+        - MessageProcessor: Processes incoming messages and routes them to agents
+        - AgentManager: Manages local agent instances and their lifecycle
+        
+    Features:
+        - Distributed agent communication via Kafka
+        - Automatic agent discovery and registration
+        - Topic-based publish/subscribe messaging
+        - Request/response messaging patterns
+        - State persistence and recovery
+        - OpenTelemetry integration for observability
+        - Graceful shutdown and error handling
+        
+    Usage:
+        ```python
+        config = WorkerConfig(...)
+        runtime = KafkaWorkerAgentRuntime(config)
+        
+        # Register agent factories
+        await runtime.register_factory("my_agent_type", MyAgent)
+        
+        # Start the runtime
+        await runtime.start()
+        
+        # Runtime will process messages until stopped
+        await runtime.stop()
+        ```
+        
+    Thread Safety:
+        This class is designed to be used from a single asyncio event loop.
+        All public methods are async and should be awaited from the same loop.
+        
+    Attributes:
+        _agent_registry: Registry for agent discovery and management
+        _subscription_svc: Service for managing message subscriptions
+        _messaging_client: Client for sending and receiving messages
+        _agent_manager: Manager for local agent instances
+        _message_processor: Processor for incoming messages
+        _pending_requests: Cache for pending request/response operations
+        _next_request_id: Counter for generating unique request IDs
     """
 
     def __init__(
@@ -40,30 +87,38 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         
         Sets up the Kafka worker runtime with all necessary components including
         agent registry, subscription service, messaging client, and message processor.
+        This constructor initializes all components but does not start any background
+        services - call start() to begin message processing.
         
         Args:
             config: Worker configuration containing Kafka settings, topics, and other
-                   runtime parameters.
+                   runtime parameters. Must include valid Kafka broker information,
+                   consumer group settings, and topic configurations.
             tracer_provider: Optional OpenTelemetry tracer provider for distributed
-                           tracing. If None, no tracing will be configured.
+                           tracing. If None, no tracing will be configured. When provided,
+                           enables detailed observability across the distributed system.
+                           
+        Raises:
+            ValueError: If the configuration is invalid or missing required fields.
+            ConnectionError: If initial Kafka connection validation fails.
         """
         AgentRuntime.__init__(self)
         StreamingWorkerBase.__init__(self,
-                               config = config,
-                               topic=config.request_topic,
-                               tracer_provider=tracer_provider)
+                                     config = config,
+                                     topic=config.request_topic,
+                                     monitoring=tracer_provider)
 
         # Kafka components
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,
                                                              streaming_service=self._service_manager.service,
-                                                             trace_helper=self._trace_helper)
+                                                             monitoring=self._trace_helper)
         self._subscription_svc: SubscriptionService = SubscriptionService(config=self._config,
                                                                           streaming_service=self._service_manager.service,
-                                                                          trace_helper=self._trace_helper)
+                                                                          monitoring=self._trace_helper)
         self._messaging_client : MessagingClient = MessagingClient(config=self._config,
                                                                    streaming_service=self._service_manager.service,
                                                                    serialization_registry=self._serialization_registry,
-                                                                   trace_helper=self._trace_helper)
+                                                                   monitoring=self._trace_helper)
 
         # Component managers
         self._agent_manager = AgentManager(self)
@@ -272,14 +327,27 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         
         Collects and serializes the state from all currently registered agent
         instances, returning a mapping that can be used to restore the runtime
-        state later.
+        state later. This is useful for implementing checkpointing, migration,
+        or disaster recovery scenarios.
+        
+        The returned state includes:
+        - agent_states: A mapping of agent IDs to their serialized states
+        - Additional runtime metadata (future extension point)
         
         Returns:
             A mapping containing the serialized state of all agents, organized
-            by agent ID under the "agent_states" key.
+            by agent ID under the "agent_states" key. The structure is:
+            {
+                "agent_states": {
+                    "agent_id_1": {...state_data...},
+                    "agent_id_2": {...state_data...},
+                    ...
+                }
+            }
             
         Raises:
             ValueError: If any agent instance is not found or cannot be accessed.
+            RuntimeError: If state serialization fails for any agent.
         """
         all_states = {
             "agent_states": {}
@@ -291,24 +359,36 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
             metadata = await agent_instance.save_metadata()
             all_states["agent_states"][agent_id] = state
 
-        raise all_states
+        return all_states
 
     async def load_state(self, state: Mapping[str, Any]) -> None:
         """Load previously saved state into all registered agents.
         
         Restores the state of all agents from a previously saved state mapping.
         The agents must already be registered before loading their state.
+        This method validates the state format and ensures all referenced
+        agents exist before attempting to load any state.
         
         Args:
             state: A mapping containing the serialized agent states, typically
-                  created by a previous call to save_state().
+                  created by a previous call to save_state(). Must contain
+                  an "agent_states" key with a mapping of agent IDs to state data.
+                  Expected structure:
+                  {
+                      "agent_states": {
+                          "agent_id_1": {...state_data...},
+                          "agent_id_2": {...state_data...},
+                          ...
+                      }
+                  }
                   
         Raises:
             ValueError: If the state format is invalid, missing required keys,
                        or if any referenced agent is not found.
+            RuntimeError: If state loading fails for any agent.
         """
-        if "agent_states" not in state or "agent_metadata" not in state:
-            raise ValueError("State must contain 'agent_states' and 'agent_metadata' keys.")
+        if "agent_states" not in state:
+            raise ValueError("State must contain 'agent_states' key.")
 
         for agent_id, agent_state in state["agent_states"].items():
             agent_instance: Agent = await self._agent_manager.get_agent(agent_id)

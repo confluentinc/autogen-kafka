@@ -19,6 +19,12 @@ class AgentManager:
         return self._instantiated_agents
 
     def __init__(self, runtime: AgentRuntime):
+        """Initialize the AgentManager with a runtime.
+        
+        Args:
+            runtime: The AgentRuntime instance that will be used to manage agent lifecycles
+                    and provide runtime context for agent operations.
+        """
         self._runtime = runtime
         self._agent_factories: Dict[
             str, Callable[[], Agent | Awaitable[Agent]] | Callable[[AgentRuntime, AgentId], Agent | Awaitable[Agent]]
@@ -34,7 +40,30 @@ class AgentManager:
         *,
         expected_class: type[T] | None = None
     ) -> AgentType:
-        """Register a factory for creating agents of a given type."""
+        """Register a factory for creating agents of a given type.
+        
+        This method registers a factory function that will be used to create agent instances
+        on-demand when they are needed. The factory is associated with a specific agent type
+        and registered in the provided agent registry.
+        
+        Args:
+            type: The agent type identifier, either as a string or AgentType instance.
+                 This will be used as the key to identify and retrieve the factory.
+            agent_factory: A callable that creates and returns an agent instance. Can be
+                          synchronous or asynchronous (returning an Awaitable).
+            agent_registry: The AgentRegistry instance where this agent type will be registered
+                           for discovery and management.
+            expected_class: Optional type hint for the expected agent class. If provided,
+                           the factory output will be validated against this type.
+        
+        Returns:
+            AgentType: The registered agent type (converted to AgentType if string was provided).
+        
+        Raises:
+            ValueError: If an agent with the same type already exists, if the agent type
+                       is already registered, or if the factory produces an instance that
+                       doesn't match the expected class.
+        """
         if isinstance(type, str):
             type = AgentType(type)
 
@@ -60,7 +89,27 @@ class AgentManager:
         return type
     
     async def register_instance(self, agent_instance: Agent, agent_id: AgentId) -> AgentId:
-        """Register a specific agent instance with a given ID."""
+        """Register a specific agent instance with a given ID.
+        
+        This method registers a pre-instantiated agent with a specific agent ID,
+        allowing the agent to be retrieved later using that ID. The agent is immediately
+        bound to the runtime and stored in the instantiated agents cache.
+        
+        Args:
+            agent_instance: The pre-created agent instance to register. This should be
+                           a fully initialized agent ready for use.
+            agent_id: The unique identifier for this agent instance. This ID will be used
+                     to retrieve the agent later and must be unique within the manager.
+        
+        Returns:
+            AgentId: The same agent ID that was provided, confirming successful registration.
+        
+        Raises:
+            ValueError: If an agent with the same ID already exists, if there's a conflict
+                       between factories and instances for the same type, or if agent
+                       instances of different types are registered to the same type.
+            RuntimeError: If the dummy factory is invoked (indicates incorrect subscription setup).
+        """
         def agent_factory() -> Agent:
             raise RuntimeError(
                 "Agent factory was invoked for an agent instance that was not registered. This is likely due to the agent type being incorrectly subscribed to a topic. If this exception occurs when publishing a message to the DefaultTopicId, then it is likely that `skip_class_subscriptions` needs to be turned off when registering the agent."
@@ -83,7 +132,23 @@ class AgentManager:
         return agent_id
     
     async def get_agent(self, agent_id: AgentId) -> Agent:
-        """Retrieve or instantiate an agent by its ID."""
+        """Retrieve or instantiate an agent by its ID.
+        
+        This method first checks if an agent with the given ID is already instantiated
+        and cached. If not, it uses the registered factory for the agent's type to
+        create a new instance, caches it, and returns it.
+        
+        Args:
+            agent_id: The unique identifier of the agent to retrieve. This includes
+                     both the agent type and specific instance identifier.
+        
+        Returns:
+            Agent: The agent instance corresponding to the provided ID. This will be
+                  either a cached instance or a newly created one from the factory.
+        
+        Raises:
+            ValueError: If no factory is registered for the agent's type.
+        """
         if agent_id in self._instantiated_agents:
             return self._instantiated_agents[agent_id]
 
@@ -96,6 +161,24 @@ class AgentManager:
         return agent
     
     async def try_get_underlying_agent_instance(self, id: AgentId, type: Type[T] = Agent) -> T:  # type: ignore[assignment]
+        """Retrieve an agent instance with type checking and casting.
+        
+        This method retrieves an agent by ID and ensures it matches the expected type,
+        providing a type-safe way to access agent instances when you need a specific
+        agent class rather than the base Agent interface.
+        
+        Args:
+            id: The unique identifier of the agent to retrieve.
+            type: The expected type/class of the agent instance. Defaults to the base
+                 Agent class if not specified.
+        
+        Returns:
+            T: The agent instance cast to the specified type.
+        
+        Raises:
+            LookupError: If no factory is registered for the agent's type.
+            TypeError: If the retrieved agent instance is not of the expected type.
+        """
         if id.type not in self._agent_factories:
             raise LookupError(f"Agent with name {id.type} not found.")
 
@@ -110,7 +193,28 @@ class AgentManager:
         agent_factory: Callable[[], T | Awaitable[T]] | Callable[[AgentRuntime, AgentId], T | Awaitable[T]],
         agent_id: AgentId,
     ) -> T:
-        """Invoke an agent factory, supporting both 0-arg and 2-arg signatures."""
+        """Invoke an agent factory, supporting both 0-arg and 2-arg signatures.
+        
+        This private method handles the invocation of agent factories with different
+        signatures for backward compatibility. It sets up the proper instantiation
+        context and handles both synchronous and asynchronous factory functions.
+        
+        Args:
+            agent_factory: The factory function to invoke. Can take either no arguments
+                          (modern style) or two arguments: runtime and agent_id (deprecated).
+            agent_id: The agent ID that will be used for instantiation context and
+                     passed to 2-arg factories.
+        
+        Returns:
+            T: The created agent instance.
+        
+        Raises:
+            ValueError: If the factory has an unsupported number of parameters (not 0 or 2).
+        
+        Note:
+            2-argument factories are deprecated and will be removed in a future version.
+            Use AgentInstantiationContext instead for accessing runtime and agent ID.
+        """
         with AgentInstantiationContext.populate_context((self._runtime, agent_id)):
             params = inspect.signature(agent_factory).parameters
             if len(params) == 0:

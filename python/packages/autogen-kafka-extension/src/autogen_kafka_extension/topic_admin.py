@@ -11,14 +11,42 @@ logger = logging.getLogger(__name__)
 
 
 class TopicAdmin:
-    """Admin client for managing Kafka topics."""
+    """Admin client for managing Kafka topics.
+    
+    This class provides a high-level interface for Kafka topic administration operations
+    including creating single or multiple topics and listing existing topics. It handles
+    the underlying Kafka admin client configuration and provides error handling for
+    common scenarios like topic already exists.
+    
+    The TopicAdmin uses the WorkerConfig to determine topic creation parameters such as
+    the number of partitions and replication factor. It also handles Kafka connection
+    settings through the admin client provided by the WorkerConfig.
+    
+    Typical usage:
+        config = WorkerConfig(...)
+        admin = TopicAdmin(config)
+        admin.create_topic("my-topic")
+        topics = admin.list_topics()
+    
+    Attributes:
+        _config: The WorkerConfig instance containing Kafka settings
+        _admin_client: The underlying Kafka admin client for operations
+    """
 
     def __init__(self, config: WorkerConfig) -> None:
         """Initialize TopicAdmin with worker configuration.
         
+        Sets up the admin client using the provided WorkerConfig which contains
+        all necessary Kafka connection parameters, authentication settings, and
+        topic creation defaults.
+        
         Args:
             config: WorkerConfig containing Kafka connection settings, partition count, 
-                   and replication factor for topic creation
+                   and replication factor for topic creation. Must provide a valid
+                   admin client through get_admin_client() method.
+                   
+        Raises:
+            Exception: If the config fails to provide a valid admin client
         """
         self._config = config
         self._admin_client = config.get_admin_client()
@@ -26,12 +54,19 @@ class TopicAdmin:
     def _create_new_topic(self, topic_name: str) -> NewTopic:
         """Create a NewTopic object with configured partitions and replication factor.
         
+        This private method creates a NewTopic instance using the topic name provided
+        and the partition count and replication factor from the WorkerConfig. The
+        NewTopic object is used by the Kafka admin client for topic creation operations.
+        
         Args:
-            topic_name: The name of the Kafka topic to create
+            topic_name: The name of the Kafka topic to create. Must be a valid Kafka
+                       topic name following Kafka naming conventions (alphanumeric
+                       characters, dots, dashes, and underscores).
             
         Returns:
-            NewTopic object configured with the topic name, partition count, and 
-            replication factor from the worker configuration
+            NewTopic: A NewTopic object configured with the topic name, partition count, 
+                     and replication factor from the worker configuration. This object
+                     is ready to be used with the Kafka admin client's create_topics method.
         """
         return NewTopic(
             topic=topic_name,
@@ -42,9 +77,26 @@ class TopicAdmin:
     def _handle_topic_creation_result(self, futures: dict, topic_names: list[str]) -> None:
         """Handle the results of topic creation futures.
         
+        This private method processes the Future objects returned by the Kafka admin
+        client's create_topics operation. It waits for each future to complete and
+        handles both successful creation and various error conditions. Topics that
+        already exist are logged as debug messages, while other errors are logged
+        as errors and re-raised.
+        
         Args:
             futures: Dictionary mapping topic names to their creation Future objects
-            topic_names: List of topic names that were requested to be created
+                    returned by the admin client's create_topics method. Each Future
+                    represents the asynchronous topic creation operation.
+            topic_names: List of topic names that were requested to be created.
+                        Used to verify that all requested topics have corresponding
+                        futures and for error reporting.
+                        
+        Raises:
+            Exception: If any topic name doesn't have a corresponding future
+            KafkaException: If topic creation fails for reasons other than topic
+                           already existing (e.g., insufficient permissions, invalid
+                           topic configuration, broker connectivity issues)
+            Exception: For any other unexpected errors during topic creation
         """
         for topic_name in topic_names:
             if topic_name not in futures:
@@ -67,8 +119,29 @@ class TopicAdmin:
     def create_topic(self, topic_name: str) -> None:
         """Create a single Kafka topic.
         
+        Creates a new Kafka topic with the specified name using the partition count
+        and replication factor configured in the WorkerConfig. If the topic already
+        exists, the operation completes successfully (idempotent behavior).
+        
+        The topic will be created with the following properties:
+        - Partition count: As specified in WorkerConfig.num_partitions
+        - Replication factor: As specified in WorkerConfig.replication_factor
+        - Default topic configuration from Kafka cluster settings
+        
         Args:
-            topic_name: The name of the Kafka topic to create
+            topic_name: The name of the Kafka topic to create. Must follow Kafka
+                       topic naming conventions (max 249 characters, alphanumeric
+                       characters, dots, dashes, and underscores only).
+                       
+        Raises:
+            KafkaException: If topic creation fails due to Kafka-related errors
+                           such as insufficient permissions, invalid configuration,
+                           or broker connectivity issues
+            Exception: For any other unexpected errors during topic creation
+            
+        Example:
+            admin = TopicAdmin(config)
+            admin.create_topic("user-events")
         """
         new_topic = self._create_new_topic(topic_name)
         
@@ -83,8 +156,34 @@ class TopicAdmin:
     def create_topics(self, topic_names: list[str]) -> None:
         """Create multiple Kafka topics.
         
+        Creates multiple Kafka topics in a single batch operation using the partition
+        count and replication factor configured in the WorkerConfig. This method is
+        more efficient than calling create_topic multiple times as it performs the
+        creation operations in parallel.
+        
+        All topics will be created with the same configuration:
+        - Partition count: As specified in WorkerConfig.num_partitions  
+        - Replication factor: As specified in WorkerConfig.replication_factor
+        - Default topic configuration from Kafka cluster settings
+        
+        If any topics already exist, they are skipped (idempotent behavior).
+        If creation of any topic fails, the method raises an exception but other
+        topics in the batch may still be created successfully.
+        
         Args:
-            topic_names: List of topic names to create in Kafka
+            topic_names: List of topic names to create in Kafka. Each name must
+                        follow Kafka topic naming conventions. Empty list is
+                        handled gracefully with a warning log.
+                        
+        Raises:
+            KafkaException: If any topic creation fails due to Kafka-related errors
+                           such as insufficient permissions, invalid configuration,
+                           or broker connectivity issues  
+            Exception: For any other unexpected errors during topic creation
+            
+        Example:
+            admin = TopicAdmin(config)
+            admin.create_topics(["user-events", "order-events", "payment-events"])
         """
         if not topic_names:
             logger.warning("No topics provided for creation")
@@ -103,8 +202,34 @@ class TopicAdmin:
     def list_topics(self) -> dict[str, Any]:
         """List all available Kafka topics.
         
+        Retrieves metadata for all topics in the Kafka cluster that the admin client
+        has access to. This includes topic names, partition information, replica
+        assignments, and other topic-level metadata.
+        
+        The returned dictionary contains topic metadata objects that provide detailed
+        information about each topic including:
+        - Number of partitions
+        - Replica assignments for each partition  
+        - In-sync replica (ISR) information
+        - Topic configuration details
+        
         Returns:
-            Dictionary mapping topic names to their metadata (partitions, replicas, etc.)
+            dict[str, Any]: Dictionary mapping topic names to their metadata objects.
+                           The metadata objects contain detailed information about
+                           partitions, replicas, and topic configuration. Returns
+                           empty dict if no topics exist or are accessible.
+                           
+        Raises:
+            KafkaException: If unable to retrieve topic metadata due to Kafka-related
+                           errors such as broker connectivity issues or insufficient
+                           permissions
+            Exception: For any other unexpected errors during metadata retrieval
+            
+        Example:
+            admin = TopicAdmin(config)
+            topics = admin.list_topics()
+            for topic_name, metadata in topics.items():
+                print(f"Topic: {topic_name}, Partitions: {len(metadata.partitions)}")
         """
         metadata: ClusterMetadata = self._admin_client.list_topics()
         return metadata.topics

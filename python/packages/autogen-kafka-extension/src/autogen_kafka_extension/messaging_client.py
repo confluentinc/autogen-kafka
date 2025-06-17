@@ -4,7 +4,7 @@ import uuid
 from asyncio import Future
 from typing import Optional, Any, Sequence, Dict
 
-from autogen_core import AgentId, CancellationToken, TopicId, JSON_DATA_CONTENT_TYPE
+from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, MessageSerializer
 from autogen_core._telemetry import get_telemetry_grpc_metadata, TraceHelper
 from cloudevents.pydantic import CloudEvent
@@ -21,18 +21,67 @@ from autogen_kafka_extension.worker_config import WorkerConfig
 logger = logging.getLogger(__name__)
 
 class MessagingClient(StreamingWorkerBase):
+    """A Kafka-based messaging client for asynchronous agent communication.
+    
+    The MessagingClient provides a high-level interface for sending and receiving messages
+    between agents using Apache Kafka as the underlying messaging infrastructure. It supports
+    both point-to-point messaging with response correlation and broadcast messaging to topics.
+    
+    Key Features:
+    - **Point-to-Point Messaging**: Send messages to specific agents and await responses
+    - **Broadcast Messaging**: Publish messages to topics for multiple subscribers
+    - **Request/Response Correlation**: Automatically correlates responses with pending requests
+    - **Message Serialization**: Handles automatic serialization/deserialization of messages
+    - **Telemetry Integration**: Provides distributed tracing and monitoring capabilities
+    - **Background Processing**: Non-blocking message sending with background task management
+    
+    The class extends StreamingWorkerBase and integrates with the Kafka streaming ecosystem
+    to provide reliable, scalable message delivery between distributed agents.
+    
+    Usage Example:
+        ```python
+        config = WorkerConfig(request_topic="requests", response_topic="responses")
+        client = MessagingClient(config)
+        
+        await client.start()
+        
+        # Send a message to a specific agent
+        response = await client.send_message(
+            message=MyMessage("hello"),
+            recipient=AgentId("agent", "123")
+        )
+        
+        # Broadcast a message to a topic
+        await client.publish_message(
+            message=MyMessage("broadcast"),
+            topic_id=TopicId("notifications", "system")
+        )
+        
+        await client.stop()
+        ```
+    
+    Thread Safety:
+        The MessagingClient is designed to be used from a single asyncio event loop.
+        Internal operations use asyncio locks to ensure thread-safe access to shared state.
+    """
 
     def __init__(self,
                  config: WorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
-                 trace_helper: TraceHelper | None = None,
-                 tracer_provider: TracerProvider | None = None,
+                 monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()
                  ) -> None:
+        """Initialize the MessagingClient for sending and receiving messages via Kafka.
+        
+        Args:
+            config: Worker configuration containing Kafka topics and connection settings
+            streaming_service: Optional streaming service for Kafka operations. If None, a default will be created
+            monitoring: Optional telemetry monitoring for tracing. Can be either TraceHelper or TracerProvider
+            serialization_registry: Registry for message serialization/deserialization. Defaults to a new instance
+        """
         super().__init__(config=config,
                          topic=config.response_topic,
-                         trace_helper=trace_helper,
-                         tracer_provider=tracer_provider,
+                         monitoring=monitoring,
                          streaming_service=streaming_service,
                          serialization_registry=serialization_registry)
         # Request/response handling
@@ -41,6 +90,11 @@ class MessagingClient(StreamingWorkerBase):
         self._next_request_id = 0
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
+        """Add one or more message serializers to the serialization registry.
+        
+        Args:
+            serializer: A single MessageSerializer or a sequence of MessageSerializers to add
+        """
         self._serialization_registry.add_serializer(serializer)
 
     async def send_message(
@@ -51,7 +105,20 @@ class MessagingClient(StreamingWorkerBase):
         sender: AgentId | None = None,
         message_id: str | None = None
     ) -> Any:
-        """Send a message to a specific agent via Kafka and await a response."""
+        """Send a message to a specific agent via Kafka and await a response.
+        
+        Args:
+            message: The message object to send
+            recipient: The AgentId of the intended recipient
+            sender: Optional AgentId of the sender. If None, defaults to "unknown"
+            message_id: Optional unique message identifier. If None, a UUID will be generated
+            
+        Returns:
+            The response message from the recipient agent
+            
+        Raises:
+            RuntimeError: If the messaging client is not started
+        """
         if not self.is_started:
             raise RuntimeError(f"{self.name} is not started. Call start() before publishing messages.")
 
@@ -106,7 +173,17 @@ class MessagingClient(StreamingWorkerBase):
         sender: AgentId | None = None,
         message_id: str | None = None,
     ) -> None:
-        """Publish a message to a Kafka topic (broadcast)."""
+        """Publish a message to a Kafka topic (broadcast to all subscribers).
+        
+        Args:
+            message: The message object to publish
+            topic_id: The TopicId specifying the target topic
+            sender: Optional AgentId of the sender. If None, sender info will be omitted
+            message_id: Optional unique message identifier. If None, a UUID will be generated
+            
+        Raises:
+            RuntimeError: If the messaging client is not started
+        """
         if not self.is_started:
             raise RuntimeError(f"{self.name} is not started. Call start() before publishing messages.")
         if message_id is None:
@@ -153,12 +230,23 @@ class MessagingClient(StreamingWorkerBase):
                 )
 
     async def _get_new_request_id(self) -> str:
-        """Generate a new unique request ID for correlating requests and responses."""
+        """Generate a new unique request ID for correlating requests and responses.
+        
+        Returns:
+            A unique string identifier for the request
+        """
         async with self._pending_requests_lock:
             self._next_request_id += 1
             return str(self._next_request_id)
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+        """Handle incoming response events from Kafka and resolve pending request futures.
+        
+        Args:
+            record: The Kafka consumer record containing the response event
+            stream: The Kafka stream instance
+            send: The send function for publishing messages
+        """
         if not isinstance(record.value, ResponseEvent):
             logger.error(f"Received non-ResponseEvent record: {record}. Expected 'ResponseEvent'.")
             return

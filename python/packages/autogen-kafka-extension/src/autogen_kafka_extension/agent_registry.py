@@ -26,20 +26,52 @@ class AgentRegistry(StreamingWorkerBase):
     def __init__(self,
                  config: WorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
-                 trace_helper: TraceHelper | None = None,
-                 tracer_provider: TracerProvider | None = None,
+                 monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
+        """
+        Initialize the AgentRegistry.
+        
+        This constructor sets up a distributed agent registry that uses Kafka streams
+        for coordinating agent availability across multiple workers.
+        
+        Args:
+            config (WorkerConfig): Configuration object containing registry settings
+                including the registry topic name and other worker configuration.
+            streaming_service (Optional[StreamingService], optional): Service for handling
+                Kafka streaming operations. If None, a default service will be created.
+                Defaults to None.
+            monitoring (TraceHelper | TracerProvider | None, optional): Helper for distributed tracing
+                and telemetry collection. Defaults to None.
+            serialization_registry (SerializationRegistry, optional): Registry for message
+                serialization/deserialization. Defaults to a new SerializationRegistry instance.
+        
+        Raises:
+            Exception: If the configuration is invalid or streaming service initialization fails.
+        """
         super().__init__(config = config,
                          topic=config.registry_topic,
-                         trace_helper=trace_helper,
-                         tracer_provider=tracer_provider,
+                         monitoring=monitoring,
                          streaming_service=streaming_service,
                          serialization_registry=serialization_registry)
 
         self._agents: Dict[str, Union[str, AgentType]] = {}
 
     def _extract_agent_key(self, agent: Union[str, AgentType]) -> str:
-        """Extract the string key from an agent identifier."""
+        """
+        Extract the string key from an agent identifier.
+        
+        This method normalizes agent identifiers to string keys for consistent
+        storage and lookup in the registry. It handles both string identifiers
+        and AgentType objects.
+        
+        Args:
+            agent (Union[str, AgentType]): The agent identifier, either a string
+                key or an AgentType object containing type information.
+        
+        Returns:
+            str: The string key representing the agent. For AgentType objects,
+                returns the 'type' attribute; for strings, returns the string itself.
+        """
         return agent.type if isinstance(agent, AgentType) else agent
 
     async def register_agent(self, agent: Union[str, AgentType]) -> None:
