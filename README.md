@@ -1,229 +1,241 @@
 # Autogen Kafka Extension
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
-[![Python](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 
-A scalable, event-driven runtime extension for [Microsoft AutoGen](https://github.com/microsoft/autogen) that enables autonomous agents to communicate over Apache Kafka. This extension provides the `KafkaWorkerAgentRuntime` which extends the core `AgentRuntime` to support message-based communication patterns including pub/sub and RPC-style interactions.
+A scalable, event-driven runtime extension for [Microsoft AutoGen](https://github.com/microsoft/autogen) that enables autonomous agents to communicate over Apache Kafka. This extension provides distributed agent communication capabilities supporting message-based patterns including pub/sub and RPC-style interactions across multiple programming languages.
 
-## 🚀 Features
+## 🚀 Key Features
 
 - **Event-Driven Architecture**: Built on Apache Kafka for scalable, distributed agent communication
-- **Agent Lifecycle Management**: Dynamic registration of agent factories and instances
+- **Multi-Language Support**: Extensible architecture supporting multiple programming languages
+- **Agent Lifecycle Management**: Dynamic registration and management of agent factories and instances
 - **Multiple Communication Patterns**: Support for both pub/sub and RPC-style messaging
-- **Streaming Processing**: Powered by `kstreams` for asynchronous event processing
-- **Schema Support**: JSON and CloudEvents-based message serialization
-- **Observability**: Integrated OpenTelemetry tracing for monitoring and debugging
-- **Fault Tolerance**: Robust error handling and background task management
+- **Streaming Processing**: Asynchronous event processing for high-throughput scenarios
+- **Schema Support**: Standardized message serialization with CloudEvents support
+- **Observability**: Integrated tracing and monitoring capabilities
+- **Fault Tolerance**: Robust error handling and recovery mechanisms
+
+## 🏗 Architecture Overview
+
+The Autogen Kafka Extension implements a distributed agent runtime that leverages Apache Kafka's streaming capabilities to enable:
+
+- **Horizontal Scaling**: Agents can be distributed across multiple instances and locations
+- **Loose Coupling**: Agents communicate through well-defined message contracts
+- **Event Sourcing**: All interactions are captured as immutable events
+- **Resilience**: Built-in fault tolerance and recovery mechanisms
+- **Language Agnostic**: Core patterns can be implemented across different programming languages
 
 ## 📦 Project Structure
 
 ```
 autogen-kafka/
 ├── .github/                             # GitHub workflows and settings
-│   └── CODEOWNERS                       # Code ownership configuration
-├── python/                              # Main Python workspace
+├── python/                              # Python implementation
 │   ├── packages/
-│   │   └── autogen-kafka-extension/     # Core extension package
+│   │   └── autogen-kafka-extension/     # Core Python extension package
 │   │       ├── src/
 │   │       │   └── autogen_kafka_extension/
 │   │       │       ├── worker_runtime.py           # Main runtime implementation
 │   │       │       ├── worker_config.py            # Configuration classes
 │   │       │       ├── streaming_service.py        # Kafka streaming service
-│   │       │       ├── streaming_worker_base.py    # Base streaming worker
 │   │       │       ├── message_processor.py        # Message processing logic
 │   │       │       ├── messaging_client.py         # Kafka messaging client
 │   │       │       ├── agent_registry.py           # Agent registration management
 │   │       │       ├── agent_manager.py            # Agent lifecycle management
 │   │       │       ├── subscription_service.py     # Subscription management
-│   │       │       ├── topic_admin.py              # Kafka topic administration
-│   │       │       ├── background_task_manager.py  # Background task handling
-│   │       │       ├── constants.py                # Shared constants
 │   │       │       ├── events/                     # Event handling and serialization
-│   │       │       │   ├── message_serdes.py       # Message serialization/deserialization
-│   │       │       │   ├── request_event.py        # Request event structures
-│   │       │       │   ├── response_event.py       # Response event structures
-│   │       │       │   ├── subscription_event.py   # Subscription events
-│   │       │       │   └── registration_event.py   # Registration events
-│   │       │       ├── __init__.py                 # Package initialization
-│   │       │       └── py.typed                    # Type hints marker
+│   │       │       └── ...                         # Additional components
 │   │       ├── tests/                   # Package tests
-│   │       │   ├── test_worker_runtime.py
-│   │       │   ├── utils.py
-│   │       │   └── __init__.py
-│   │       ├── run_tests.sh            # Test runner script
 │   │       └── pyproject.toml          # Package configuration
-│   ├── assets/                         # Project assets (empty)
-│   ├── docker-compose.yml              # Kafka development environment
-│   ├── pyproject.toml                  # Python workspace configuration
-│   ├── uv.lock                         # Dependency lock file
-│   ├── shared_tasks.toml               # Shared task configuration
-│   ├── LICENSE                         # Apache 2.0 License
-│   └── README.md                       # Detailed implementation guide
-├── pyproject.toml                       # Root project metadata
-├── service.yml                          # Service configuration
-├── CHANGELOG.md                         # Version history
-├── LICENSE                              # Apache 2.0 License
-└── README.md                           # This file
+│   └── README.md                       # Python-specific implementation guide
+├── dotnet/                             # Future C# implementation
+├── docs/                               # Architecture and design documentation
+├── examples/                           # Cross-language usage examples
+├── docker-compose.yml                  # Kafka development environment
+├── service.yml                         # Service configuration
+├── CHANGELOG.md                        # Version history
+├── LICENSE                             # Apache 2.0 License
+└── README.md                          # This file
 ```
+
+## 🌍 Language Support
+
+### Current Implementations
+
+- **Python** (`python/`): Full-featured implementation with comprehensive agent runtime
+  - AutoGen integration via `KafkaWorkerAgentRuntime`
+  - Kafka Streams processing with `kstreams`
+  - CloudEvents support and OpenTelemetry tracing
+  - See [Python README](python/README.md) for detailed usage
+
+### Planned Implementations
+
+- **C#** (`dotnet/`): Planned implementation for .NET ecosystems
+
+## 🚀 Core Concepts
+
+### Agent Runtime
+
+The extension provides language-specific implementations of agent runtimes that:
+- Register and manage agent lifecycles
+- Route messages between agents via Kafka topics
+- Handle both synchronous (RPC) and asynchronous (pub/sub) communication patterns
+- Provide observability and error handling
+
+### Message Patterns
+
+- **Direct Messaging**: Point-to-point communication between specific agents
+- **Topic Broadcasting**: Publish-subscribe patterns for event distribution
+- **Request-Response**: RPC-style interactions with response correlation
+- **Event Streaming**: Continuous processing of event streams
+
+### Configuration Management
+
+- Environment-specific configurations for Kafka connectivity
+- Topic and partition management
+- Consumer group and scaling strategies
+- Security and authentication settings
 
 ## 📋 Requirements
 
-- **Python**: 3.10 or higher
-- **Apache Kafka**: Local cluster or managed service (e.g., Confluent Cloud)
-- **UV**: For dependency management (recommended)
+### Infrastructure
+- **Apache Kafka**: Version 2.8+ (local cluster or managed service)
+- **ZooKeeper**: If using older Kafka versions
+- **Container Runtime**: Docker for local development (optional)
 
-### Core Dependencies
-- `autogen-core>=0.6.1` - Core AutoGen framework
-- `autogen>=0.1.0` - AutoGen library
-- `confluent-kafka>=2.10.1` - Kafka client
-- `kstreams>=0.26.9` - Kafka Streams abstraction
-- `cloudevents>=1.12.0` - CloudEvents support
-- `aiorun>=2025.1.1` - Async runtime management
+### Language-Specific Requirements
+- **Python**: 3.10+ with AutoGen Core dependencies
+- **C#**: .NET 6+ (planned)
 
-### Development Dependencies
-- `pytest>=8.4.0` - Testing framework
-- `pytest-asyncio>=1.0.0` - Async testing support
-- `testcontainers>=4.10.0` - Integration testing with Kafka
+## 🏃 Getting Started
 
-## 🏃 Quick Start
+### 1. Infrastructure Setup
 
-### 1. Installation
-
-Navigate to the Python directory and install dependencies using UV:
+Start a local Kafka cluster for development:
 
 ```bash
-cd python
-uv sync --all-extras
-```
-
-### 2. Kafka Setup
-
-Ensure your Kafka cluster is running. For local development, you can use the provided Docker Compose configuration:
-
-```bash
-# Navigate to the python directory and start Kafka
-cd python
+# Using the provided Docker Compose
 docker-compose up -d
 ```
 
-Or use a managed Kafka service like Confluent Cloud.
+Or configure connection to your existing Kafka infrastructure.
 
-### 3. Basic Usage
+### 2. Choose Your Implementation
 
-```python
-from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
-from autogen_core.agent import AgentId
+#### Python
+Navigate to the Python implementation:
 
-# Configure the runtime
-config = WorkerConfig(
-    request_topic="agent.requests",
-    subscription_topic="agent.responses", 
-    group_id="worker-group",
-    client_id="worker-client",
-    title="My Agent Runtime"
-)
-
-# Create and start the runtime
-runtime = KafkaWorkerAgentRuntime(config)
-await runtime.start()
-
-# Register an agent factory
-await runtime.register_factory("echo", lambda: EchoAgent())
-
-# Register a specific agent instance
-agent_id = AgentId("echo", "instance-001")
-await runtime.register_agent_instance(EchoAgent(), agent_id)
-
-# Send a message (RPC-style)
-response = await runtime.send_message(
-    "Hello World", 
-    recipient=AgentId("echo", "instance-001")
-)
-
-# Publish a message (broadcast)
-from autogen_core.topic import TopicId
-await runtime.publish_message(
-    "Announcement", 
-    topic_id=TopicId("event", "broadcast")
-)
+```bash
+cd python
 ```
+
+Follow the [Python README](python/README.md) for detailed setup and usage instructions.
+
+#### Other Languages
+Additional language implementations are planned. Check the respective directories when available.
+
+### 3. Basic Concepts
+
+All implementations follow these core patterns:
+
+1. **Runtime Configuration**: Configure Kafka connectivity and topics
+2. **Agent Registration**: Register agent factories and instances
+3. **Message Handling**: Implement agents that process incoming messages
+4. **Communication**: Use direct messaging or topic publishing for agent interaction
 
 ## 🛠 Development
 
-### Running Tests
+### Contributing
 
-To run the tests, you have several options:
+This repository welcomes contributions across all language implementations:
 
-```bash
-# From the root directory
-cd python/packages/autogen-kafka-extension
-./run_tests.sh
+1. **Architecture**: Core patterns and message schemas
+2. **Implementation**: Language-specific runtime implementations
+3. **Documentation**: Usage guides and architectural decisions
+4. **Testing**: Integration and performance testing
+5. **Examples**: Cross-language demonstration scenarios
 
-# Or manually with proper PYTHONPATH
-cd python/packages/autogen-kafka-extension
-PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py
-
-# Or run all tests from the python workspace
-cd python
-uv run pytest packages/autogen-kafka-extension/tests/
-```
-
-### Development Setup
-
-The project uses:
-- **UV** for dependency management and Python tooling
-- **pytest** for testing with async support
-- **testcontainers** for integration testing with Kafka
-- **Workspace structure** for organized package management
-
-### Package Development
-
-The extension is organized as a UV workspace with the main package located in `python/packages/autogen-kafka-extension/`. This structure allows for:
-- Clean separation of concerns
-- Easy testing and development
-- Extensible architecture for additional packages
-
-## 📖 Documentation
-
-For detailed implementation guides, architecture details, and advanced usage examples, see the [Python README](python/README.md).
-
-## 🤝 Contributing
-
-This repository is part of the broader AutoGen ecosystem and welcomes contributions from the community.
+### Development Workflow
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes with appropriate tests
-4. Ensure all tests pass (`uv run pytest`)
-5. Submit a pull request
+2. Create a feature branch
+3. Implement changes with appropriate tests
+4. Ensure compatibility with existing message formats
+5. Submit a pull request with clear documentation
 
-Please ensure your code follows the project's coding standards and includes appropriate tests.
+### Testing
+
+Each language implementation includes:
+- Unit tests for core functionality
+- Integration tests with real Kafka clusters
+- Performance benchmarks
+- Cross-language compatibility tests
+
+## 📊 Monitoring and Observability
+
+The extension provides comprehensive observability:
+
+- **Distributed Tracing**: OpenTelemetry integration for message flow tracking
+- **Metrics**: Agent performance and message throughput monitoring
+- **Logging**: Structured logging for debugging and audit trails
+- **Health Checks**: Runtime and dependency health monitoring
+
+## 🔧 Configuration
+
+### Kafka Topics
+
+The extension uses standardized topic naming conventions:
+- `agent.requests` - Direct agent messaging
+- `agent.responses` - Response correlation
+- `agent.events` - Event broadcasting
+- `agent.registry` - Agent lifecycle events
+
+### Message Formats
+
+All implementations use CloudEvents-compatible message formats for:
+- Cross-language compatibility
+- Schema evolution support
+- Observability integration
+- Standard tooling compatibility
+
+## 📈 Roadmap
+
+### Short Term
+- [ ] Complete Python implementation with full AutoGen integration
+- [ ] C# implementation planning and design
+- [ ] Cross-language message format standardization
+- [ ] Comprehensive documentation and examples
+
+### Medium Term
+- [ ] C# implementation with .NET AutoGen integration
+- [ ] Advanced observability and monitoring tools
+- [ ] Performance optimization and benchmarking
+- [ ] Schema registry integration
+
+### Long Term
+- [ ] Additional language implementations (Java, Go)
+- [ ] Advanced agent state persistence
+- [ ] Multi-cluster and federation support
+- [ ] Advanced security and authentication features
 
 ## 📄 License
 
 This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
 
-## 🔄 Changelog
-
-See [CHANGELOG.md](CHANGELOG.md) for details of recent updates and version history.
-
-## 🆘 Support & Resources
+## 🤝 Support & Community
 
 - **Issues**: Report bugs and request features via GitHub Issues
-- **Documentation**: Check the [Python README](python/README.md) for detailed usage
-- **AutoGen Core**: Learn about [AutoGen concepts](https://github.com/microsoft/autogen)
-- **Apache Kafka**: [Official Kafka documentation](https://kafka.apache.org/documentation/)
-- **Community**: Join discussions in the AutoGen community
+- **Discussions**: Join architectural discussions in GitHub Discussions
+- **Documentation**: Language-specific guides in respective directories
+- **AutoGen Community**: Connect with the broader AutoGen ecosystem
+- **Kafka Resources**: [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
 
-## 🎯 Roadmap
+## 🔗 Related Projects
 
-- [ ] Enhanced agent state persistence
-- [ ] Agent metadata service integration
-- [ ] Pluggable metrics and monitoring
-- [ ] Advanced CLI tooling for debugging
-- [ ] Extended CloudEvents support
-- [ ] Performance optimizations for high-throughput scenarios
+- [Microsoft AutoGen](https://github.com/microsoft/autogen) - Core agent framework
+- [Apache Kafka](https://kafka.apache.org/) - Distributed streaming platform
+- [CloudEvents](https://cloudevents.io/) - Event specification standard
+- [OpenTelemetry](https://opentelemetry.io/) - Observability framework
 
 ---
 
