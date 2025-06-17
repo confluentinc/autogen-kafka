@@ -34,6 +34,15 @@ class MessageProcessor:
         trace_helper: TraceHelper,
         config: WorkerConfig
     ):
+        """Initialize the MessageProcessor with required dependencies.
+        
+        Args:
+            agent_manager: Manages agent instances and lifecycle
+            serialization_registry: Handles message serialization and deserialization
+            subscription_service: Manages topic subscriptions and recipient lookups
+            trace_helper: Provides distributed tracing capabilities
+            config: Worker configuration settings including topic names
+        """
         self._agent_manager = agent_manager
         self._serialization_registry = serialization_registry
         self._subscription_service = subscription_service
@@ -41,7 +50,18 @@ class MessageProcessor:
         self._config = config
     
     async def process_event(self, event: CloudEvent) -> None:
-        """Process an incoming CloudEvent message."""
+        """Process an incoming CloudEvent message.
+        
+        Deserializes the event payload, determines recipients based on subscriptions,
+        and delivers the message to all subscribed agents. Handles both regular
+        messages and RPC requests.
+        
+        Args:
+            event: The CloudEvent containing the message payload and metadata
+            
+        Raises:
+            ValueError: If the message content type is unsupported
+        """
         event_attributes = event.get_attributes()
         sender: AgentId | None = None
         if (constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
@@ -85,7 +105,7 @@ class MessageProcessor:
             agent = await self._agent_manager.get_agent(agent_id)
             with MessageHandlerContext.populate_context(agent.id):
 
-                def stringify_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str]:
+                def stringify_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str | None]:
                     result: Dict[str, str | None] = {}
                     for key, value in attributes.items():
                         if isinstance(value, str):
@@ -116,7 +136,20 @@ class MessageProcessor:
             logger.error("Error handling event", exc_info=e)
     
     async def process_request(self, request: RequestEvent, send: Send) -> None:
-        """Process an incoming request message, invoke the agent, and send a response."""
+        """Process an incoming request message, invoke the agent, and send a response.
+        
+        Handles direct agent-to-agent RPC requests by deserializing the request payload,
+        invoking the target agent, and sending back either a successful response or
+        an error response if processing fails.
+        
+        Args:
+            request: The request event containing the message payload, recipient info,
+                    and metadata
+            send: Kafka producer function for sending response messages
+            
+        Raises:
+            RuntimeError: If sending the response message fails
+        """
         recipient = request.recipient
         sender = request.agent_id
         if sender is None:
