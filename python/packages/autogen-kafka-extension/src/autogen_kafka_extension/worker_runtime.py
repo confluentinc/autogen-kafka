@@ -114,7 +114,6 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
             message=message,
             recipient=recipient,
             sender=sender,
-            cancellation_token=cancellation_token,
             message_id=message_id
         )
 
@@ -131,7 +130,6 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
             message=message,
             topic_id=topic_id,
             sender=sender,
-            cancellation_token=cancellation_token,
             message_id=message_id
         )
 

@@ -49,7 +49,6 @@ class MessagingClient(StreamingWorkerBase):
         recipient: AgentId,
         *,
         sender: AgentId | None = None,
-        cancellation_token: CancellationToken | None = None,
         message_id: str | None = None
     ) -> Any:
         """Send a message to a specific agent via Kafka and await a response."""
@@ -105,7 +104,6 @@ class MessagingClient(StreamingWorkerBase):
         topic_id: TopicId,
         *,
         sender: AgentId | None = None,
-        cancellation_token: CancellationToken | None = None,
         message_id: str | None = None,
     ) -> None:
         """Publish a message to a Kafka topic (broadcast)."""
