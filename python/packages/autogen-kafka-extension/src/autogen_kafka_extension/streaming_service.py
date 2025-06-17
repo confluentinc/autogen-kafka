@@ -6,7 +6,7 @@ from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consum
 from kstreams.types import StreamFunc
 
 from autogen_kafka_extension.events.message_serdes import EventSerializer, EventDeserializer
-from autogen_kafka_extension.topic_admin import TopicAdmin
+from autogen_kafka_extension.topic_admin_service import TopicAdminService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 
@@ -80,7 +80,7 @@ class StreamingService(StreamEngine):
     
     Attributes:
         _config (WorkerConfig): Configuration object containing Kafka connection details
-        _topics_admin (TopicAdmin): Topic administration service for creating/managing topics
+        _topics_admin (TopicAdminService): Topic administration service for creating/managing topics
     """
     
     def __init__(self, config: WorkerConfig):
@@ -105,7 +105,7 @@ class StreamingService(StreamEngine):
             producer_class=Producer,
         )
         self._config = config
-        self._topics_admin = TopicAdmin(self._config)
+        self._topics_admin = TopicAdminService(self._config)
 
     def create_topics(self, topics: list[str]) -> None:
         """

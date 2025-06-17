@@ -565,9 +565,9 @@ async def deploy_runtime_cluster():
 3. **Message Delivery Issues**
    ```python
    # Check topic health
-   from autogen_kafka_extension.topic_admin import TopicAdmin
+   from autogen_kafka_extension.topic_admin_service import TopicAdminService
    
-   admin = TopicAdmin(config.kafka_config)
+   admin = TopicAdminService(config.kafka_config)
    topics = await admin.list_topics()
    print(f"Available topics: {topics}")
    ```

@@ -10,7 +10,7 @@ from autogen_kafka_extension.worker_config import WorkerConfig
 logger = logging.getLogger(__name__)
 
 
-class TopicAdmin:
+class TopicAdminService:
     """Admin client for managing Kafka topics.
     
     This class provides a high-level interface for Kafka topic administration operations
