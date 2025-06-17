@@ -1,0 +1,34 @@
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+autogen-kafka-extension = { workspace = true }
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[project]
+name = "autogen-kafka"
+version = "0.1.0"
+description = "autogen kafka support extension"
+keywords = ["autogen", "kafka", "extension"]
+readme = "README.md"
+license = {file="LICENSE"}
+requires-python = ">=3.10"
+dependencies = [
+    "aiorun>=2025.1.1",
+    "autogen-core>=0.6.1",
+    "autogen>=0.1.0",
+    "hatchling>=1.27.0",
+    "kstreams>=0.26.9",
+    "pyautogen>=0.9",
+    "confluent-kafka>=2.10.1",
+    "cloudevents>=1.12.0"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "testcontainers>=4.10.0",
+]

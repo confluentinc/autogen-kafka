@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autogen-kafka-extension"
+version = "0.1.0"
+description = "autogen kafka support extension"
+keywords = ["autogen", "kafka", "extension"]
+requires-python = ">=3.10"
+dependencies = [
+    "autogen>=0.1.0",
+    "autogen-core>=0.4.0.dev9",
+    "kstreams>=0.26.9",
+    "confluent-kafka>=2.10.1",
+    "cloudevents>=1.12.0"
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.0",
+    "pytest-asyncio>=1.0.0",
+    "testcontainers>=4.10.0",
+]
