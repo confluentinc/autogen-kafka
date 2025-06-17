@@ -13,7 +13,11 @@ T = TypeVar("T", bound=Agent)
 
 class AgentManager:
     """Manages agent factories, instances, and registration."""
-    
+
+    @property
+    def agents(self) -> Dict[AgentId, Agent]:
+        return self._instantiated_agents
+
     def __init__(self, runtime: AgentRuntime):
         self._runtime = runtime
         self._agent_factories: Dict[

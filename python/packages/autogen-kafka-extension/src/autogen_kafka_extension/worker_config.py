@@ -27,15 +27,15 @@ class WorkerConfig:
                  subscription_topic: str,
                  registry_topic: str,
                  response_topic: str,
+                 group_id: str,
+                 client_id: str,
                  bootstrap_servers: list[str],
-                 num_partitions: int | None = 3,
-                 replication_factor: int | None = 1,
+                 num_partitions: int = 3,
+                 replication_factor: int = 1,
                  security_protocol: SecurityProtocol | None = None,
                  security_mechanism: SaslMechanism | None = None,
                  sasl_plain_username: str | None = None,
-                 sasl_plain_password: str | None = None,
-                 group_id: str | None = None,
-                 client_id: str | None = None) -> None:
+                 sasl_plain_password: str | None = None) -> None:
         self._title = title
         self._request_topic: str = request_topic
         self._subscription: str = subscription_topic
@@ -44,10 +44,10 @@ class WorkerConfig:
         self._security_protocol: SecurityProtocol | None = security_protocol
         self._security_mechanism: SaslMechanism | None = security_mechanism
         self._bootstrap_servers: list[str] = bootstrap_servers
-        self._group_id: str | None = group_id
-        self._client_id: str | None = client_id
+        self._group_id: str = group_id
+        self._client_id: str = client_id
         self._registry_topic: str = registry_topic
-        self._response_topic: str | None = response_topic
+        self._response_topic: str = response_topic
         self._num_partitions: int = num_partitions
         self._replication_factor = replication_factor
 
@@ -60,7 +60,7 @@ class WorkerConfig:
         return self._client_id
 
     @property
-    def group_id(self) -> str | None:
+    def group_id(self) -> str:
         """
         The Kafka consumer group ID.
         If not set, the worker will not join any consumer group.
@@ -68,7 +68,7 @@ class WorkerConfig:
         return self._group_id
 
     @property
-    def request_topic(self) -> str | None:
+    def request_topic(self) -> str:
         """
         The Kafka topic to consume messages from.
         If not set, the worker will not consume any messages.

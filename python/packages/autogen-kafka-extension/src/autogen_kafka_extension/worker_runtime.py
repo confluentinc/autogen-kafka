@@ -36,7 +36,17 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         config: WorkerConfig,
         tracer_provider: TracerProvider | None = None
     ) -> None:
-        """Initialize a new KafkaWorkerAgentRuntime instance."""
+        """Initialize a new KafkaWorkerAgentRuntime instance.
+        
+        Sets up the Kafka worker runtime with all necessary components including
+        agent registry, subscription service, messaging client, and message processor.
+        
+        Args:
+            config: Worker configuration containing Kafka settings, topics, and other
+                   runtime parameters.
+            tracer_provider: Optional OpenTelemetry tracer provider for distributed
+                           tracing. If None, no tracing will be configured.
+        """
         AgentRuntime.__init__(self)
         StreamingWorkerBase.__init__(self,
                                config = config,
@@ -71,7 +81,16 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         self._next_request_id = 0
 
     async def start(self) -> None:
-        """Start the Kafka stream processing engine and subscribe to topics."""
+        """Start the Kafka stream processing engine and subscribe to topics.
+        
+        Initializes and starts all internal services in the correct order:
+        1. Subscription service for managing agent subscriptions
+        2. Messaging client for sending/receiving messages
+        3. Agent registry for agent discovery and management
+        4. Underlying streaming service for Kafka connectivity
+        
+        This method is idempotent - calling it multiple times has no additional effect.
+        """
         if self.is_started:
             return
 
@@ -86,7 +105,17 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         await super().start()
 
     async def stop(self) -> None:
-        """Stop the Kafka stream processing engine and wait for background tasks to finish."""
+        """Stop the Kafka stream processing engine and wait for background tasks to finish.
+        
+        Gracefully shuts down all services in reverse order of startup:
+        1. Unsubscribes from all topics
+        2. Stops messaging client
+        3. Stops agent registry
+        4. Stops subscription service
+        5. Stops underlying streaming service
+        
+        This method is idempotent - calling it multiple times has no additional effect.
+        """
         if not self.is_started:
             return
 
@@ -110,6 +139,25 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None
     ) -> Any:
+        """Send a message to a specific agent.
+        
+        Routes a message to the specified recipient agent through the messaging client.
+        The message will be serialized and sent via Kafka to the appropriate topic.
+        
+        Args:
+            message: The message payload to send. Can be any serializable object.
+            recipient: The AgentId of the agent that should receive the message.
+            sender: Optional AgentId of the sending agent. If None, the message
+                   will be sent without sender identification.
+            cancellation_token: Optional token for cancelling the operation.
+                              Currently not implemented in the messaging client.
+            message_id: Optional unique identifier for the message. If None,
+                       a new ID will be generated automatically.
+                       
+        Returns:
+            The response from the messaging client, typically indicating
+            successful message delivery.
+        """
         return await self._messaging_client.send_message(
             message=message,
             recipient=recipient,
@@ -126,6 +174,21 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         cancellation_token: CancellationToken | None = None,
         message_id: str | None = None,
     ) -> None:
+        """Publish a message to a specific topic.
+        
+        Broadcasts a message to all subscribers of the specified topic through
+        the messaging client. The message will be serialized and published via Kafka.
+        
+        Args:
+            message: The message payload to publish. Can be any serializable object.
+            topic_id: The TopicId identifying which topic to publish to.
+            sender: Optional AgentId of the publishing agent. If None, the message
+                   will be published without sender identification.
+            cancellation_token: Optional token for cancelling the operation.
+                              Currently not implemented in the messaging client.
+            message_id: Optional unique identifier for the message. If None,
+                       a new ID will be generated automatically.
+        """
         await self._messaging_client.publish_message(
             message=message,
             topic_id=topic_id,
@@ -134,11 +197,28 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         )
 
     async def remove_subscription(self, id: str) -> None:
-        """Remove a subscription by its ID."""
+        """Remove a subscription by its ID.
+        
+        Unsubscribes from the specified subscription, stopping message delivery
+        for that subscription. The agent will no longer receive messages matching
+        the subscription criteria.
+        
+        Args:
+            id: The unique identifier of the subscription to remove.
+        """
         await self._subscription_svc.remove_subscription(id)
 
     async def add_subscription(self, subscription: Subscription) -> None:
-        """Add a new subscription."""
+        """Add a new subscription.
+        
+        Registers a new subscription with the subscription service, enabling
+        the agent to receive messages that match the subscription criteria.
+        
+        Args:
+            subscription: The Subscription object defining the subscription
+                         parameters, including topic filters, agent ID, and
+                         message type filters.
+        """
         await self._subscription_svc.add_subscription(subscription)
 
     async def register_factory(
@@ -148,7 +228,22 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         *,
         expected_class: type[T] | None = None
     ) -> AgentType:
-        """Register a factory for creating agents of a given type."""
+        """Register a factory for creating agents of a given type.
+        
+        Registers a factory function that can create agent instances of the specified
+        type. The factory will be called when new agents of this type need to be
+        instantiated.
+        
+        Args:
+            type: The agent type identifier, either as a string or AgentType object.
+            agent_factory: A callable that returns an agent instance, either
+                          synchronously or asynchronously.
+            expected_class: Optional type constraint for type checking. The factory
+                           must produce instances of this class.
+                           
+        Returns:
+            The AgentType object representing the registered agent type.
+        """
         return await self._agent_manager.register_factory(
             type, agent_factory, self._agent_registry, expected_class=expected_class
         )
@@ -158,40 +253,172 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         agent_instance: Agent,
         agent_id: AgentId,
     ) -> AgentId:
-        """Register a specific agent instance with a given ID."""
+        """Register a specific agent instance with a given ID.
+        
+        Registers an already-instantiated agent with the specified ID, making it
+        available for message processing and subscription handling.
+        
+        Args:
+            agent_instance: The Agent instance to register.
+            agent_id: The unique AgentId to assign to this agent instance.
+            
+        Returns:
+            The AgentId that was assigned to the registered agent.
+        """
         return await self._agent_manager.register_instance(agent_instance, agent_id)
 
     async def save_state(self) -> Mapping[str, Any]:
-        """Save the runtime state (not implemented)."""
-        raise NotImplementedError("Saving state is not yet implemented.")
+        """Save the state of all registered agents.
+        
+        Collects and serializes the state from all currently registered agent
+        instances, returning a mapping that can be used to restore the runtime
+        state later.
+        
+        Returns:
+            A mapping containing the serialized state of all agents, organized
+            by agent ID under the "agent_states" key.
+            
+        Raises:
+            ValueError: If any agent instance is not found or cannot be accessed.
+        """
+        all_states = {
+            "agent_states": {}
+        }
+        for agent_id, agent_instance in self._agent_manager.agents:
+            if agent_instance is None:
+                raise ValueError(f"Agent with ID {agent_id} not found.")
+            state = await agent_instance.save_state()
+            metadata = await agent_instance.save_metadata()
+            all_states["agent_states"][agent_id] = state
+
+        raise all_states
 
     async def load_state(self, state: Mapping[str, Any]) -> None:
-        """Load the runtime state (not implemented)."""
-        raise NotImplementedError("Loading state is not yet implemented.")
+        """Load previously saved state into all registered agents.
+        
+        Restores the state of all agents from a previously saved state mapping.
+        The agents must already be registered before loading their state.
+        
+        Args:
+            state: A mapping containing the serialized agent states, typically
+                  created by a previous call to save_state().
+                  
+        Raises:
+            ValueError: If the state format is invalid, missing required keys,
+                       or if any referenced agent is not found.
+        """
+        if "agent_states" not in state or "agent_metadata" not in state:
+            raise ValueError("State must contain 'agent_states' and 'agent_metadata' keys.")
+
+        for agent_id, agent_state in state["agent_states"].items():
+            agent_instance: Agent = await self._agent_manager.get_agent(agent_id)
+            if agent_instance is None:
+                raise ValueError(f"Agent with ID {agent_id} not found.")
+            await agent_instance.load_state(agent_state)
 
     async def agent_metadata(self, agent: AgentId) -> AgentMetadata:
-        """Get agent metadata (not implemented)."""
-        raise NotImplementedError("Agent metadata is not yet implemented.")
+        """Get metadata for a specific agent.
+        
+        Retrieves the metadata associated with the specified agent, including
+        information about the agent's type, capabilities, and configuration.
+        
+        Args:
+            agent: The AgentId of the agent whose metadata to retrieve.
+            
+        Returns:
+            The AgentMetadata object containing the agent's metadata.
+            
+        Raises:
+            ValueError: If the specified agent is not found.
+        """
+        agent_instance: Agent = await self._agent_manager.get_agent(agent)
+        if agent_instance is None:
+            raise ValueError(f"Agent with ID {agent} not found.")
+
+        return agent_instance.metadata
 
     async def agent_save_state(self, agent: AgentId) -> Mapping[str, Any]:
-        """Save agent state (not implemented)."""
-        raise NotImplementedError("Agent save_state is not yet implemented.")
+        """Save the state of a specific agent.
+        
+        Serializes and returns the current state of the specified agent instance.
+        
+        Args:
+            agent: The AgentId of the agent whose state to save.
+            
+        Returns:
+            A mapping containing the serialized state of the agent.
+            
+        Raises:
+            ValueError: If the specified agent is not found.
+        """
+        agent_instance: Agent = await self._agent_manager.get_agent(agent)
+        if agent_instance is None:
+            raise ValueError(f"Agent with ID {agent} not found.")
+
+        return await agent_instance.save_state()
 
     async def agent_load_state(self, agent: AgentId, state: Mapping[str, Any]) -> None:
-        """Load agent state (not implemented)."""
-        raise NotImplementedError("Agent load_state is not yet implemented.")
+        """Load state into a specific agent.
+        
+        Restores the state of the specified agent from the provided state mapping.
+        
+        Args:
+            agent: The AgentId of the agent whose state to load.
+            state: A mapping containing the serialized agent state.
+            
+        Raises:
+            ValueError: If the specified agent is not found.
+        """
+        agent_instance: Agent = await self._agent_manager.get_agent(agent)
+        if agent_instance is None:
+            raise ValueError(f"Agent with ID {agent} not found.")
+
+        await agent_instance.load_state(state)
 
     async def try_get_underlying_agent_instance(self, id: AgentId, type: Type[T] = Agent) -> T:  # type: ignore[assignment]
+        """Get the underlying agent instance with type checking.
+        
+        Retrieves the actual agent instance for the specified AgentId, with
+        optional type checking to ensure the agent is of the expected type.
+        
+        Args:
+            id: The AgentId of the agent instance to retrieve.
+            type: The expected type of the agent instance. Defaults to Agent.
+            
+        Returns:
+            The underlying agent instance, cast to the specified type.
+            
+        Raises:
+            ValueError: If the agent is not found.
+            TypeError: If the agent is not of the expected type.
+        """
         return await self._agent_manager.try_get_underlying_agent_instance(id, type)
 
     async def _get_new_request_id(self) -> str:
-        """Generate a new unique request ID for correlating requests and responses."""
+        """Generate a new unique request ID for correlating requests and responses.
+        
+        Creates a thread-safe, monotonically increasing request ID that can be
+        used to correlate request and response messages in the messaging system.
+        
+        Returns:
+            A unique string identifier for the request.
+        """
         async with self._pending_requests_lock:
             self._next_request_id += 1
             return str(self._next_request_id)
 
     async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
-        """Callback for processing incoming Kafka records."""
+        """Callback for processing incoming Kafka records.
+        
+        Processes incoming Kafka consumer records by routing them to the appropriate
+        message processor based on the event type. Handles both RequestEvents
+        and CloudEvents.
+        
+        Args:
+            cr: The Kafka ConsumerRecord containing the message data and metadata.
+            stream: The Kafka stream instance for stream processing operations.
+            send: The send function for producing messages back to Kafka topics.
+        """
         if isinstance(cr.value, RequestEvent):
             self._background_task_manager.add_task(
                 self._message_processor.process_request(cr.value, send)
@@ -206,4 +433,15 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
         logger.error(f"Received unknown event type: {cr.value}. Expected 'CloudEvent' or 'Message'.")
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
+        """Add one or more message serializers to the runtime.
+        
+        Registers message serializers with the serialization registry, enabling
+        the runtime to serialize and deserialize custom message types for
+        Kafka transport.
+        
+        Args:
+            serializer: A single MessageSerializer or a sequence of MessageSerializers
+                       to register. Each serializer defines how to convert between
+                       Python objects and their serialized representation.
+        """
         self._serialization_registry.add_serializer(serializer)
