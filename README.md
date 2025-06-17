@@ -187,7 +187,7 @@ The extension provides comprehensive observability:
 The extension uses standardized topic naming conventions:
 - `agent.requests` - Direct agent messaging
 - `agent.responses` - Response correlation
-- `agent.events` - Event broadcasting
+- `agent.subscription` - Agent subscription events
 - `agent.registry` - Agent lifecycle events
 
 ### Message Formats
@@ -200,23 +200,15 @@ All implementations use CloudEvents-compatible message formats for:
 
 ## 📈 Roadmap
 
-### Short Term
 - [ ] Complete Python implementation with full AutoGen integration
-- [ ] C# implementation planning and design
-- [ ] Cross-language message format standardization
+- [ ] Schema registry integration
+- [ ] Agent state persistence
 - [ ] Comprehensive documentation and examples
-
-### Medium Term
+- [ ] C# implementation planning and design
 - [ ] C# implementation with .NET AutoGen integration
+- [ ] Cross-language message format standardization
 - [ ] Advanced observability and monitoring tools
 - [ ] Performance optimization and benchmarking
-- [ ] Schema registry integration
-
-### Long Term
-- [ ] Additional language implementations (Java, Go)
-- [ ] Advanced agent state persistence
-- [ ] Multi-cluster and federation support
-- [ ] Advanced security and authentication features
 
 ## 📄 License
 
