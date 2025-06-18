@@ -6,7 +6,7 @@ from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consum
 from kstreams.types import StreamFunc
 
 from autogen_kafka_extension.events.message_serdes import EventSerializer, EventDeserializer
-from autogen_kafka_extension.topic_admin_service import TopicAdminService
+from autogen_kafka_extension.services.topic_admin_service import TopicAdminService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 

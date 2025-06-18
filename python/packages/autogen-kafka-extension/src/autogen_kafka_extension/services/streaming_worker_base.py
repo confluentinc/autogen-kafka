@@ -9,12 +9,12 @@ from cloudevents.abstract import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.background_task_manager import BackgroundTaskManager
+from autogen_kafka_extension.services.background_task_manager import BackgroundTaskManager
 from autogen_kafka_extension.events.registration_event import RegistrationEvent
 from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.message_serdes import EventSerializer
 from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.streaming_service import StreamingService
+from autogen_kafka_extension.services.streaming_service import StreamingService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)

@@ -12,12 +12,12 @@ from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.messaging_client import MessagingClient
-from autogen_kafka_extension.agent_registry import AgentRegistry
-from autogen_kafka_extension.agent_manager import AgentManager
+from autogen_kafka_extension.services.agent_registry import AgentRegistry
+from autogen_kafka_extension.services.agent_manager import AgentManager
 from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.message_processor import MessageProcessor
-from autogen_kafka_extension.subscription_service import SubscriptionService
+from autogen_kafka_extension.services.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.services.message_processor import MessageProcessor
+from autogen_kafka_extension.services.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 T = TypeVar("T", bound=Agent)

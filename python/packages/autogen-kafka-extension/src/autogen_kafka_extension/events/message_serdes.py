@@ -9,7 +9,7 @@ import json
 
 from kstreams.serializers import Serializer
 
-from autogen_kafka_extension.constants import EVENT_TYPE_ATTR
+from autogen_kafka_extension.services.constants import EVENT_TYPE_ATTR
 from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.registration_event import RegistrationEvent
 from autogen_kafka_extension.events.response_event import ResponseEvent

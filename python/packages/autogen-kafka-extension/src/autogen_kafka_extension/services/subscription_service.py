@@ -8,10 +8,10 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.streaming_service import StreamingService
+from autogen_kafka_extension.services.streaming_service import StreamingService
 from autogen_kafka_extension.events.message_serdes import EventSerializer
 from autogen_kafka_extension.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
-from autogen_kafka_extension.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.services.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)

@@ -423,20 +423,21 @@ runtime = KafkaWorkerAgentRuntime(config, message_serdes=CustomSerDes())
 #### Custom Agent Middleware
 
 ```python
-from autogen_kafka_extension.message_processor import MessageProcessor
+from autogen_kafka_extension.services.message_processor import MessageProcessor
+
 
 class CustomMessageProcessor(MessageProcessor):
-    """Custom message processing with additional middleware."""
-    
-    async def process_message(self, message: Message, context) -> Message:
-        # Add custom preprocessing
-        message = await self.preprocess(message)
-        
-        # Call parent processing
-        result = await super().process_message(message, context)
-        
-        # Add custom postprocessing
-        return await self.postprocess(result)
+   """Custom message processing with additional middleware."""
+
+   async def process_message(self, message: Message, context) -> Message:
+      # Add custom preprocessing
+      message = await self.preprocess(message)
+
+      # Call parent processing
+      result = await super().process_message(message, context)
+
+      # Add custom postprocessing
+      return await self.postprocess(result)
 ```
 
 ---
@@ -565,7 +566,7 @@ async def deploy_runtime_cluster():
 3. **Message Delivery Issues**
    ```python
    # Check topic health
-   from autogen_kafka_extension.topic_admin_service import TopicAdminService
+   from autogen_kafka_extension.services.topic_admin_service import TopicAdminService
    
    admin = TopicAdminService(config.kafka_config)
    topics = await admin.list_topics()

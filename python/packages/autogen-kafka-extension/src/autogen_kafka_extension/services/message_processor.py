@@ -12,11 +12,11 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from cloudevents.pydantic import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import constants
-from autogen_kafka_extension.agent_manager import AgentManager
+from autogen_kafka_extension.services import constants
+from autogen_kafka_extension.services.agent_manager import AgentManager
 from autogen_kafka_extension.events.request_event import RequestEvent
 from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.subscription_service import SubscriptionService
+from autogen_kafka_extension.services.subscription_service import SubscriptionService
 from autogen_kafka_extension.worker_config import WorkerConfig
 from autogen_kafka_extension.events.message_serdes import EventSerializer
 
@@ -69,7 +69,7 @@ class MessageProcessor:
                 constants.AGENT_SENDER_KEY_ATTR in event_attributes and
                 event_attributes[constants.AGENT_SENDER_KEY_ATTR] is not None):
             sender = AgentId(event_attributes[constants.AGENT_SENDER_TYPE_ATTR],
-                             event_attributes[constants.AGENT_SENDER_KEY_ATTR],)
+                             event_attributes[constants.AGENT_SENDER_KEY_ATTR], )
         topic_id = TopicId(event.type, event.source)
         recipients = await self._subscription_service.get_subscribed_recipients(topic_id)
         message_content_type = event_attributes[constants.DATA_CONTENT_TYPE_ATTR]
@@ -85,8 +85,8 @@ class MessageProcessor:
         topic_type_suffix = topic_id.type.split(":", maxsplit=1)[1] if ":" in topic_id.type else ""
         is_rpc = topic_type_suffix == constants.MESSAGE_KIND_VALUE_RPC_REQUEST
         is_marked_rpc_type = (
-            constants.MESSAGE_KIND_ATTR in event_attributes
-            and event_attributes[constants.MESSAGE_KIND_ATTR] == constants.MESSAGE_KIND_VALUE_RPC_REQUEST
+                constants.MESSAGE_KIND_ATTR in event_attributes
+                and event_attributes[constants.MESSAGE_KIND_ATTR] == constants.MESSAGE_KIND_VALUE_RPC_REQUEST
         )
         if is_rpc and not is_marked_rpc_type:
             warnings.warn("Received RPC request with topic type suffix but not marked as RPC request.", stacklevel=2)
