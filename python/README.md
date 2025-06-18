@@ -75,28 +75,30 @@ Here's a simple example to get the runtime started:
 
 ```python
 import asyncio
-from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+
 
 async def main():
-    # Configure the runtime
-    config = WorkerConfig(
-        request_topic="agent.requests",
-        subscription_topic="agent.responses",
-        group_id="worker-group",
-        client_id="worker-client",
-        title="Python Agent Runtime"
-    )
+   # Configure the runtime
+   config = WorkerConfig(
+      request_topic="agent.requests",
+      subscription_topic="agent.responses",
+      group_id="worker-group",
+      client_id="worker-client",
+      title="Python Agent Runtime"
+   )
 
-    # Create and start the runtime
-    runtime = KafkaWorkerAgentRuntime(config)
-    await runtime.start()
-    
-    # Runtime is now ready for agent registration and messaging
-    return runtime
+   # Create and start the runtime
+   runtime = KafkaWorkerAgentRuntime(config)
+   await runtime.start()
+
+   # Runtime is now ready for agent registration and messaging
+   return runtime
+
 
 if __name__ == "__main__":
-    runtime = asyncio.run(main())
+   runtime = asyncio.run(main())
 ```
 
 ---
@@ -247,33 +249,33 @@ config = WorkerConfig(
 ### Advanced Configuration
 
 ```python
-from autogen_kafka_extension.worker_config import KafkaConfig
+from autogen_kafka_extension.runtimes.worker_config import KafkaConfig
 
 # Advanced Kafka configuration
 kafka_config = KafkaConfig(
-    bootstrap_servers="kafka-cluster:9092",
-    security_protocol="SASL_SSL",
-    sasl_mechanism="PLAIN",
-    sasl_username="your_username",
-    sasl_password="your_password",
-    
-    # Performance tuning
-    batch_size=16384,
-    linger_ms=100,
-    compression_type="gzip",
-    
-    # Consumer settings
-    session_timeout_ms=30000,
-    heartbeat_interval_ms=10000,
-    max_poll_records=500,
+   bootstrap_servers="kafka-cluster:9092",
+   security_protocol="SASL_SSL",
+   sasl_mechanism="PLAIN",
+   sasl_username="your_username",
+   sasl_password="your_password",
+
+   # Performance tuning
+   batch_size=16384,
+   linger_ms=100,
+   compression_type="gzip",
+
+   # Consumer settings
+   session_timeout_ms=30000,
+   heartbeat_interval_ms=10000,
+   max_poll_records=500,
 )
 
 config = WorkerConfig(
-    request_topic="agent.requests",
-    subscription_topic="agent.responses",
-    group_id="worker-group",
-    client_id="worker-client",
-    kafka_config=kafka_config
+   request_topic="agent.requests",
+   subscription_topic="agent.responses",
+   group_id="worker-group",
+   client_id="worker-client",
+   kafka_config=kafka_config
 )
 ```
 
@@ -403,18 +405,20 @@ src/autogen_kafka_extension/
 #### Custom Message Serialization
 
 ```python
-from autogen_kafka_extension.events.message_serdes import MessageSerDes
+from autogen_kafka_extension.runtimes.events import MessageSerDes
+
 
 class CustomSerDes(MessageSerDes):
-    """Custom message serialization for specific use cases."""
-    
-    def serialize(self, message: Message) -> bytes:
-        # Implement custom serialization
-        pass
-    
-    def deserialize(self, data: bytes) -> Message:
-        # Implement custom deserialization
-        pass
+   """Custom message serialization for specific use cases."""
+
+   def serialize(self, message: Message) -> bytes:
+      # Implement custom serialization
+      pass
+
+   def deserialize(self, data: bytes) -> Message:
+      # Implement custom deserialization
+      pass
+
 
 # Use custom serializer
 runtime = KafkaWorkerAgentRuntime(config, message_serdes=CustomSerDes())
@@ -423,7 +427,7 @@ runtime = KafkaWorkerAgentRuntime(config, message_serdes=CustomSerDes())
 #### Custom Agent Middleware
 
 ```python
-from autogen_kafka_extension.services.message_processor import MessageProcessor
+from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
 
 
 class CustomMessageProcessor(MessageProcessor):
@@ -566,7 +570,7 @@ async def deploy_runtime_cluster():
 3. **Message Delivery Issues**
    ```python
    # Check topic health
-   from autogen_kafka_extension.services.topic_admin_service import TopicAdminService
+   from autogen_kafka_extension.runtimes.services.topic_admin_service import TopicAdminService
    
    admin = TopicAdminService(config.kafka_config)
    topics = await admin.list_topics()

@@ -9,11 +9,11 @@ import json
 
 from kstreams.serializers import Serializer
 
-from autogen_kafka_extension.services.constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.events.registration_event import RegistrationEvent
-from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.events.subscription_event import SubscriptionEvent
+from autogen_kafka_extension.runtimes.services.constants import EVENT_TYPE_ATTR
+from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
+from autogen_kafka_extension.runtimes.events.registration_event import RegistrationEvent
+from autogen_kafka_extension.runtimes.events.response_event import ResponseEvent
+from autogen_kafka_extension.runtimes.events.subscription_event import SubscriptionEvent
 
 
 class EventDeserializer(middleware.BaseMiddleware):

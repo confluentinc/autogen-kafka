@@ -5,9 +5,9 @@ from typing import Any
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
 from kstreams.types import StreamFunc
 
-from autogen_kafka_extension.events.message_serdes import EventSerializer, EventDeserializer
-from autogen_kafka_extension.services.topic_admin_service import TopicAdminService
-from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.events.message_serdes import EventSerializer, EventDeserializer
+from autogen_kafka_extension.runtimes.services.topic_admin_service import TopicAdminService
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 
 @dataclass

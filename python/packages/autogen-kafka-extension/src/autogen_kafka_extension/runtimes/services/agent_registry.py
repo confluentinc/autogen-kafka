@@ -7,10 +7,10 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.events.registration_event import RegistrationEvent, RegistrationMessageType
-from autogen_kafka_extension.services.streaming_service import StreamingService
-from autogen_kafka_extension.services.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.events.registration_event import RegistrationEvent, RegistrationMessageType
+from autogen_kafka_extension.runtimes.services.streaming_service import StreamingService
+from autogen_kafka_extension.runtimes.services.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 

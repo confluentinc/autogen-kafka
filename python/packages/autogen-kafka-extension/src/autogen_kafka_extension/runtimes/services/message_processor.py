@@ -12,13 +12,13 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from cloudevents.pydantic import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension.services import constants
-from autogen_kafka_extension.services.agent_manager import AgentManager
-from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.services.subscription_service import SubscriptionService
-from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.events.message_serdes import EventSerializer
+from autogen_kafka_extension.runtimes.services import constants
+from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
+from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
+from autogen_kafka_extension.runtimes.events.response_event import ResponseEvent
+from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.events.message_serdes import EventSerializer
 
 logger = logging.getLogger(__name__)
 

@@ -11,14 +11,14 @@ from cloudevents.pydantic import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.messaging_client import MessagingClient
-from autogen_kafka_extension.services.agent_registry import AgentRegistry
-from autogen_kafka_extension.services.agent_manager import AgentManager
-from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.services.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.services.message_processor import MessageProcessor
-from autogen_kafka_extension.services.subscription_service import SubscriptionService
-from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.messaging_client import MessagingClient
+from autogen_kafka_extension.runtimes.services.agent_registry import AgentRegistry
+from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
+from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
+from autogen_kafka_extension.runtimes.services.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
+from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)

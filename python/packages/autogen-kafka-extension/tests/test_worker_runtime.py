@@ -7,9 +7,9 @@ from autogen_core import try_get_known_serializers_for_type, AgentType, AgentId,
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 from testcontainers.kafka import KafkaContainer
 
-from autogen_kafka_extension.services.subscription_service import SubscriptionService
-from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
 from utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
     LoopbackAgentWithDefaultSubscription
 
