@@ -1,7 +1,8 @@
 import asyncio
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
+from contextlib import asynccontextmanager
 
 from autogen_core import CancellationToken
 from autogen_core.memory import Memory, UpdateContextResult, MemoryContent, MemoryQueryResult, ListMemory
@@ -15,104 +16,437 @@ from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
 
 logger = logging.getLogger(__name__)
 
-# This is experimental and may change in the future.
-class KafkaMemory(Memory, StreamingWorkerBase):
+# Constants
+DEFAULT_TOPIC_DELETION_WAIT_SECONDS = 1.0
+MAX_TOPIC_DELETION_RETRIES = 30
+TOPIC_DELETION_TIMEOUT_SECONDS = 60.0
 
-    @property
-    def memory_topic(self) -> str:
-        """Get the topic name for this memory instance."""
-        return self._memory_topic
+
+class KafkaMemoryError(Exception):
+    """Base exception for KafkaMemory operations."""
+    pass
+
+
+class TopicDeletionTimeoutError(KafkaMemoryError):
+    """Raised when topic deletion times out."""
+    pass
+
+
+class KafkaMemory(Memory, StreamingWorkerBase):
+    """
+    A distributed memory implementation that uses Apache Kafka for persistence and synchronization.
+    
+    This class provides a memory interface that persists content to Kafka topics, allowing multiple
+    instances to share memory state across distributed systems. It wraps an underlying Memory instance
+    (defaults to ListMemory) and publishes all memory operations to a Kafka topic for synchronization.
+    
+    Key features:
+    - Distributed memory sharing across multiple instances
+    - Persistent storage via Kafka topics
+    - Session-based topic isolation
+    - Automatic topic management (creation/deletion)
+    - Event-driven synchronization between instances
+    - Async context manager support for proper resource cleanup
+    
+    This implementation is experimental and subject to change.
+    """
 
     def __init__(self,
                  config: MemoryConfig,
                  session_id: str,
                  *,
-                 memory: Memory | None = None) -> None:
+                 memory: Optional[Memory] = None) -> None:
+        """
+        Initialize a KafkaMemory instance.
+        
+        Args:
+            config (MemoryConfig): Configuration object containing Kafka connection details
+                                  and memory-specific settings.
+            session_id (str): Unique identifier for this memory session. Used to create
+                            an isolated topic and identify messages from this instance.
+            memory (Optional[Memory]): Underlying memory implementation to wrap.
+                                     Defaults to ListMemory() if not provided.
+        """
         self._config = config
-        self._memory_topic = config.memory_topic + "_" + session_id
         self._session_id = session_id
+        self._memory_topic = self._create_topic_name(config.memory_topic, session_id)
         self._memory = memory or ListMemory()
-        self._id = uuid.uuid4().__str__()
+        self._instance_id = str(uuid.uuid4())
+        self._topic_admin: Optional[TopicAdminService] = None
 
+        # Initialize the streaming worker base with the memory topic
         StreamingWorkerBase.__init__(
             self,
             config=config,
             topic=self._memory_topic)
 
+    @property
+    def memory_topic(self) -> str:
+        """
+        Get the Kafka topic name used for this memory instance.
+        
+        Returns:
+            str: The topic name, which includes the session ID for isolation.
+        """
+        return self._memory_topic
+
+    @property
+    def session_id(self) -> str:
+        """
+        Get the session ID for this memory instance.
+        
+        Returns:
+            str: The session ID used for topic isolation and message identification.
+        """
+        return self._session_id
+
+    @property
+    def instance_id(self) -> str:
+        """
+        Get the unique instance ID for this memory instance.
+        
+        Returns:
+            str: The unique ID used to identify messages from this instance.
+        """
+        return self._instance_id
+
+    async def __aenter__(self):
+        """Async context manager entry."""
+        await self._ensure_started()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """Async context manager exit with proper cleanup."""
+        await self.close()
+
     async def update_context(
         self,
         model_context: ChatCompletionContext,
     ) -> UpdateContextResult:
-        return await self._memory.update_context(model_context = model_context)
+        """
+        Update the model context with memory content.
+        
+        This method delegates to the underlying memory implementation to update
+        the chat completion context with relevant memory content.
+        
+        Args:
+            model_context (ChatCompletionContext): The context to update with memory content.
+            
+        Returns:
+            UpdateContextResult: Result of the context update operation.
+            
+        Raises:
+            KafkaMemoryError: If there's an error updating the context.
+        """
+        try:
+            return await self._memory.update_context(model_context=model_context)
+        except Exception as e:
+            logger.error(f"Failed to update context: {e}")
+            raise KafkaMemoryError(f"Context update failed: {e}") from e
 
     async def query(
         self,
         query: str | MemoryContent,
-        cancellation_token: CancellationToken | None = None,
+        cancellation_token: Optional[CancellationToken] = None,
         **kwargs: Any,
     ) -> MemoryQueryResult:
-        await self._ensure_started()
+        """
+        Query the memory for relevant content.
+        
+        Ensures the Kafka worker is started before querying the underlying memory.
+        
+        Args:
+            query (str | MemoryContent): The query to search for in memory.
+            cancellation_token (Optional[CancellationToken]): Token to cancel the operation.
+            **kwargs (Any): Additional keyword arguments passed to the underlying
+                          memory query method.
+            
+        Returns:
+            MemoryQueryResult: The result of the memory query.
+            
+        Raises:
+            KafkaMemoryError: If there's an error querying the memory.
+        """
+        try:
+            await self._ensure_started()
+            return await self._memory.query(
+                query=query,
+                cancellation_token=cancellation_token,
+                **kwargs,
+            )
+        except Exception as e:
+            logger.error(f"Failed to query memory: {e}")
+            raise KafkaMemoryError(f"Memory query failed: {e}") from e
 
-        return await self._memory.query(
-            query=query,
-            cancellation_token=cancellation_token,
-            **kwargs,
-        )
+    async def add(self, content: MemoryContent, cancellation_token: Optional[CancellationToken] = None) -> None:
+        """
+        Add content to memory and broadcast the addition to other instances.
+        
+        This method adds content to the local memory and then publishes a MemoryEvent
+        to the Kafka topic so other KafkaMemory instances can synchronize.
+        
+        Args:
+            content (MemoryContent): The content to add to memory.
+            cancellation_token (Optional[CancellationToken]): Token to cancel the operation.
+            
+        Raises:
+            KafkaMemoryError: If there's an error adding content or broadcasting the event.
+        """
+        try:
+            await self._ensure_started()
+            
+            # Add to local memory first
+            await self._memory.add(content, cancellation_token=cancellation_token)
+            
+            # Broadcast the addition to other instances via Kafka
+            await self._broadcast_memory_event(content)
+            
+        except Exception as e:
+            logger.error(f"Failed to add content to memory: {e}")
+            raise KafkaMemoryError(f"Failed to add memory content: {e}") from e
 
-    async def add(self, content: MemoryContent, cancellation_token: CancellationToken | None = None) -> None:
-        await self._ensure_started()
+    async def clear(self) -> None:
+        """
+        Clear all memory content and reset the Kafka topic.
+        
+        This method:
+        1. Clears the local memory
+        2. Stops the Kafka worker if running
+        3. Deletes the memory topic to clear distributed state
+        4. Waits for topic deletion to complete with timeout
+        5. Restarts the worker with a clean topic
+        
+        This effectively resets the entire distributed memory state.
+        
+        Raises:
+            KafkaMemoryError: If there's an error clearing memory or managing the topic.
+        """
+        try:
+            logger.info(f"Clearing memory for session {self._session_id}")
+            
+            # Clear local memory first
+            await self._memory.clear()
+            
+            # Stop the worker if it's running
+            if self.is_started:
+                await self.stop()
+            
+            # Reset the topic
+            await self._reset_memory_topic()
+            
+            # Restart with a clean topic
+            await self.start()
+            
+            logger.info(f"Memory cleared successfully for session {self._session_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to clear memory: {e}")
+            raise KafkaMemoryError(f"Failed to clear memory: {e}") from e
 
-        await self._memory.add(content, cancellation_token=cancellation_token)
+    async def close(self) -> None:
+        """
+        Close the memory instance and cleanup resources.
+        
+        This method closes the underlying memory implementation and stops
+        the Kafka worker. Should be called when the memory is no longer needed.
+        
+        Raises:
+            KafkaMemoryError: If there's an error closing the memory or worker.
+        """
+        try:
+            logger.info(f"Closing KafkaMemory for session {self._session_id}")
+            
+            # Close underlying memory
+            if self._memory:
+                await self._memory.close()
+            
+            # Stop the Kafka worker
+            if self.is_started:
+                await self.stop()
+                
+            logger.info(f"KafkaMemory closed successfully for session {self._session_id}")
+            
+        except Exception as e:
+            logger.error(f"Failed to close memory: {e}")
+            raise KafkaMemoryError(f"Failed to close memory: {e}") from e
+
+    # Private methods
+
+    def _create_topic_name(self, base_topic: str, session_id: str) -> str:
+        """
+        Create a session-specific topic name.
+        
+        Args:
+            base_topic (str): The base topic name from configuration.
+            session_id (str): The session ID for isolation.
+            
+        Returns:
+            str: The complete topic name with session ID.
+        """
+        return f"{base_topic}_{session_id}"
+
+    def _get_topic_admin(self) -> TopicAdminService:
+        """
+        Get or create a topic admin service instance.
+        
+        Returns:
+            TopicAdminService: The topic admin service for managing topics.
+        """
+        if self._topic_admin is None:
+            self._topic_admin = TopicAdminService(config=self._config)
+        return self._topic_admin
+
+    async def _ensure_started(self) -> None:
+        """
+        Ensure the Kafka worker is started before performing memory operations.
+        
+        This is an internal method that checks if the streaming worker is running
+        and starts it if necessary. This ensures the instance can receive and send
+        memory synchronization events.
+        
+        Raises:
+            KafkaMemoryError: If the worker fails to start.
+        """
+        if not self.is_started:
+            try:
+                await super().start()
+                logger.info(f"KafkaMemory worker started for session {self._session_id}")
+            except Exception as e:
+                logger.error(f"Failed to start KafkaMemory worker: {e}")
+                raise KafkaMemoryError(f"Failed to start worker: {e}") from e
+
+    async def _broadcast_memory_event(self, content: MemoryContent) -> None:
+        """
+        Broadcast a memory event to other instances.
+        
+        Args:
+            content (MemoryContent): The memory content to broadcast.
+            
+        Raises:
+            Exception: If broadcasting fails.
+        """
+        event = MemoryEvent(memory_content=content, sender=self._instance_id)
         await super().send_message(
-            message=MemoryEvent(memory_content=content, sender=self._id),
+            message=event,
             topic=self.memory_topic,
             recipient=self._session_id,
         )
+        logger.debug(f"Broadcasted memory event for session {self._session_id}")
 
-    async def clear(self) -> None:
+    async def _reset_memory_topic(self) -> None:
+        """
+        Reset the memory topic by deleting and waiting for deletion completion.
+        
+        Raises:
+            TopicDeletionTimeoutError: If topic deletion times out.
+            KafkaMemoryError: If there's an error managing the topic.
+        """
+        try:
+            topic_admin = self._get_topic_admin()
+            
+            # Delete the memory topic to clear distributed state
+            topic_admin.delete_topics(topic_names=[self.memory_topic])
+            logger.info(f"Initiated deletion of topic {self.memory_topic}")
+            
+            # Wait for topic deletion to complete with timeout
+            await self._wait_for_topic_deletion(topic_admin)
+            
+        except TopicDeletionTimeoutError:
+            raise
+        except Exception as e:
+            logger.error(f"Failed to reset memory topic: {e}")
+            raise KafkaMemoryError(f"Failed to reset topic: {e}") from e
 
-        await self._memory.clear()
-
-        if self.is_started:
-            await self.stop()
-
-        # Delete the memory topic
-        topic_admin = TopicAdminService(config=self._config)
-        topic_admin.delete_topics(topic_names=[self.memory_topic])
-
-        # TODO: Find a better way to wait for topic deletion
+    async def _wait_for_topic_deletion(self, topic_admin: TopicAdminService) -> None:
+        """
+        Wait for topic deletion to complete with timeout and retry logic.
+        
+        Args:
+            topic_admin (TopicAdminService): The topic admin service to check topic status.
+            
+        Raises:
+            TopicDeletionTimeoutError: If topic deletion times out.
+        """
+        retries = 0
+        start_time = asyncio.get_event_loop().time()
+        
         while self.memory_topic in topic_admin.list_topics():
-            logger.info(f"Waiting for topic {self.memory_topic} to be deleted...")
-            await asyncio.sleep(1)
-
-        await self.start()
-
-    async def close(self) -> None:
-        await self._memory.close()
-        await self.stop()
-
-    async def _ensure_started(self) -> None:
-        if not self.is_started:
-            await super().start()
-            logger.info(f"KafkaMemory worker started with ID: {self._session_id}")
+            current_time = asyncio.get_event_loop().time()
+            
+            # Check for overall timeout
+            if current_time - start_time > TOPIC_DELETION_TIMEOUT_SECONDS:
+                raise TopicDeletionTimeoutError(
+                    f"Topic {self.memory_topic} deletion timed out after "
+                    f"{TOPIC_DELETION_TIMEOUT_SECONDS} seconds"
+                )
+            
+            # Check for max retries
+            if retries >= MAX_TOPIC_DELETION_RETRIES:
+                raise TopicDeletionTimeoutError(
+                    f"Topic {self.memory_topic} deletion exceeded max retries ({MAX_TOPIC_DELETION_RETRIES})"
+                )
+            
+            logger.debug(f"Waiting for topic {self.memory_topic} deletion... (attempt {retries + 1})")
+            await asyncio.sleep(DEFAULT_TOPIC_DELETION_WAIT_SECONDS)
+            retries += 1
+        
+        logger.info(f"Topic {self.memory_topic} successfully deleted after {retries} attempts")
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
-        if record.value is None:
-            # Received a tombstone record, which indicates deletion
-            logger.debug(f"Received tombstone record: {record}")
-            if not str(record.key).startswith(self._session_id):
-                logger.debug("Tombstone record from another worker, clearing memory")
-                await self._memory.clear()
-            return
+        """
+        Handle incoming Kafka events for memory synchronization.
+        
+        This method processes incoming MemoryEvents from other KafkaMemory instances
+        and updates the local memory accordingly. It handles two types of events:
+        1. Tombstone records (null values) indicating memory clearing
+        2. MemoryEvents containing content to add to memory
+        
+        Args:
+            record (ConsumerRecord): The Kafka consumer record containing the event.
+            stream (Stream): The Kafka stream object (unused in this implementation).
+            send (Send): The send object for publishing messages (unused in this implementation).
+        """
+        try:
+            if record.value is None:
+                await self._handle_tombstone_record(record)
+                return
 
-        if not isinstance(record.value, MemoryEvent):
-            logger.error(f"Unexpected record value type: {type(record.value)}")
-            return
+            if not isinstance(record.value, MemoryEvent):
+                logger.error(f"Unexpected record value type: {type(record.value)}")
+                return
 
-        # Process the memory content
-        event = record.value
-        if event.sender == self._id:
+            await self._handle_memory_event(record.value)
+            
+        except Exception as e:
+            logger.error(f"Error handling Kafka event: {e}")
+            # Don't re-raise to avoid breaking the event processing loop
+
+    async def _handle_tombstone_record(self, record: ConsumerRecord) -> None:
+        """
+        Handle tombstone records indicating memory clearing.
+        
+        Args:
+            record (ConsumerRecord): The tombstone record to process.
+        """
+        logger.debug(f"Received tombstone record: {record}")
+        
+        # Only clear memory if the tombstone is from another worker instance
+        if not str(record.key).startswith(self._session_id):
+            logger.debug("Tombstone record from another worker, clearing memory")
+            await self._memory.clear()
+
+    async def _handle_memory_event(self, event: MemoryEvent) -> None:
+        """
+        Handle memory events from other instances.
+        
+        Args:
+            event (MemoryEvent): The memory event to process.
+        """
+        # Skip events that we sent ourselves to avoid duplicate processing
+        if event.sender == self._instance_id:
             logger.debug(f"Skipping event from self: {event}")
             return
 
+        # Add the content from other instances to our local memory
+        logger.debug(f"Adding content from instance {event.sender}")
         await self._memory.add(event.memory_content)
