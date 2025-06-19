@@ -14,11 +14,11 @@ from kstreams import Send
 
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
-from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
-from autogen_kafka_extension.runtimes.events.response_event import ResponseEvent
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
-from autogen_kafka_extension.runtimes.events.message_serdes import EventSerializer
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
+from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 
 logger = logging.getLogger(__name__)
 

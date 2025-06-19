@@ -1,12 +1,12 @@
-import uuid
 from dataclasses import dataclass
 from typing import Any
 
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
 from kstreams.types import StreamFunc
 
-from autogen_kafka_extension.runtimes.events.message_serdes import EventSerializer, EventDeserializer
-from autogen_kafka_extension.runtimes.services.topic_admin_service import TopicAdminService
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer, EventDeserializer
+from autogen_kafka_extension.shared.kafka_config import KafkaConfig
+from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 
@@ -25,7 +25,6 @@ class StreamConfig:
         group_id (str): Base consumer group ID for the Kafka consumer
         client_id (str): Base client ID for the Kafka consumer
         auto_offset_reset (str): Strategy for handling consumer offset when no committed offset exists.
-                                Defaults to "latest"
         enable_auto_commit (bool): Whether to enable automatic offset commits.
                                   Defaults to True
     """
@@ -33,9 +32,9 @@ class StreamConfig:
     topics: list[str]
     group_id: str
     client_id: str
-    auto_offset_reset: str = "latest"
+    auto_offset_reset: str
     enable_auto_commit: bool = True
-    
+
     def get_consumer_config(self) -> dict[str, Any]:
         """
         Get the Kafka consumer configuration dictionary.
@@ -52,8 +51,8 @@ class StreamConfig:
                 - enable_auto_commit: Auto-commit configuration
         """
         return {
-            "client_id": f"{self.client_id}-{uuid.uuid4()}",
-            "group_id": f"{self.group_id}-{uuid.uuid4()}",
+            "client_id": f"{self.client_id}",
+            "group_id": f"{self.group_id}",
             "auto_offset_reset": self.auto_offset_reset,  
             "enable_auto_commit": self.enable_auto_commit
         }
@@ -83,7 +82,7 @@ class StreamingService(StreamEngine):
         _topics_admin (TopicAdminService): Topic administration service for creating/managing topics
     """
     
-    def __init__(self, config: WorkerConfig):
+    def __init__(self, config: KafkaConfig):
         """
         Initialize the StreamingService with the given configuration.
         
@@ -98,7 +97,7 @@ class StreamingService(StreamEngine):
         """
         super().__init__(
             backend=config.get_kafka_backend(),
-            title=config.title,
+            title=config.name,
             serializer=EventSerializer(),
             monitor=PrometheusMonitor(),
             consumer_class=Consumer,
@@ -163,9 +162,9 @@ class StreamingService(StreamEngine):
                             group_id: str,
                             client_id: str,
                             func: StreamFunc,
+                            auto_offset_reset: str,
                             *,
                             auto_create_topics: bool = True,
-                            auto_offset_reset: str = "latest",
                             enable_auto_commit: bool = True) -> Stream:
         """
         Create topics (if needed), create a stream, and add it to the engine.
@@ -183,7 +182,6 @@ class StreamingService(StreamEngine):
                            appended for uniqueness
             func (StreamFunc): Stream processing function that handles incoming messages
             auto_create_topics (bool, optional): Whether to automatically create topics
-                                               if they don't exist. Defaults to True
             auto_offset_reset (str, optional): Consumer offset reset strategy when no
                                              committed offset exists. Defaults to "latest"
             enable_auto_commit (bool, optional): Whether to enable automatic offset

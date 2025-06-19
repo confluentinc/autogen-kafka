@@ -8,16 +8,16 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.runtimes.services.streaming_service import StreamingService
-from autogen_kafka_extension.runtimes.events.message_serdes import EventSerializer
-from autogen_kafka_extension.runtimes.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
-from autogen_kafka_extension.runtimes.services.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
+from autogen_kafka_extension.shared.streaming_service import StreamingService
+from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
+from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class SubscriptionService(StreamingWorkerBase):
+class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
     """
     Service for managing agent subscriptions with distributed coordination via Kafka.
     

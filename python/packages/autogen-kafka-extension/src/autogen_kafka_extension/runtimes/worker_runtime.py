@@ -14,8 +14,8 @@ from opentelemetry.trace import TracerProvider
 from autogen_kafka_extension.runtimes.messaging_client import MessagingClient
 from autogen_kafka_extension.runtimes.services.agent_registry import AgentRegistry
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
-from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
-from autogen_kafka_extension.runtimes.services.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
@@ -24,7 +24,7 @@ T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
 
 
-class KafkaWorkerAgentRuntime(StreamingWorkerBase, AgentRuntime):
+class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
     """
     A Kafka-based agent runtime for distributed multi-agent systems.
     

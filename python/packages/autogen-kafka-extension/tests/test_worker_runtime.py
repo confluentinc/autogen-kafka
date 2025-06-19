@@ -44,11 +44,11 @@ def create_worker_config(
     connection: str, 
     group_suffix: str, 
     client_suffix: str,
-    title: str = WORKER_TITLE
+    name: str = WORKER_TITLE
 ) -> WorkerConfig:
     """Helper function to create a WorkerConfig with standard settings."""
     return WorkerConfig(
-        title=title,
+        name=name + f"_{group_suffix}_{client_suffix}",
         request_topic=TOPIC_NAMES["request"],
         subscription_topic=TOPIC_NAMES["subscription"],
         registry_topic=TOPIC_NAMES["registry"],
@@ -349,8 +349,9 @@ async def test_disconnected_agent(kafka_connection):
     """Test agent behavior when worker disconnects and reconnects."""
     config_1 = create_worker_config(kafka_connection, "1", "1")
     config_2 = create_worker_config(kafka_connection, "2", "2")
+    config_3 = create_worker_config(kafka_connection, "3", "3")
 
-    subscriptions = SubscriptionService(config=config_1)
+    subscriptions = SubscriptionService(config=config_3)
     worker1 = KafkaWorkerAgentRuntime(config=config_1)
     worker1_2 = KafkaWorkerAgentRuntime(config=config_2)
 

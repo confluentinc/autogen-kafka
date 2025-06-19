@@ -12,15 +12,15 @@ from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.runtimes.services import constants
-from autogen_kafka_extension.runtimes.events.request_event import RequestEvent
-from autogen_kafka_extension.runtimes.events.response_event import ResponseEvent
-from autogen_kafka_extension.runtimes.services.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.runtimes.services.streaming_service import StreamingService
+from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.events.response_event import ResponseEvent
+from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
+from autogen_kafka_extension.shared.streaming_service import StreamingService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
-class MessagingClient(StreamingWorkerBase):
+class MessagingClient(StreamingWorkerBase[WorkerConfig]):
     """A Kafka-based messaging client for asynchronous agent communication.
     
     The MessagingClient provides a high-level interface for sending and receiving messages

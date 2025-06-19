@@ -405,7 +405,7 @@ src/autogen_kafka_extension/
 #### Custom Message Serialization
 
 ```python
-from autogen_kafka_extension.runtimes.events import MessageSerDes
+from autogen_kafka_extension.shared.events import MessageSerDes
 
 
 class CustomSerDes(MessageSerDes):
@@ -570,7 +570,7 @@ async def deploy_runtime_cluster():
 3. **Message Delivery Issues**
    ```python
    # Check topic health
-   from autogen_kafka_extension.runtimes.services.topic_admin_service import TopicAdminService
+   from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
    
    admin = TopicAdminService(config.kafka_config)
    topics = await admin.list_topics()
