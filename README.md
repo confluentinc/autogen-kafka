@@ -10,6 +10,7 @@ A scalable, event-driven runtime extension for [Microsoft AutoGen](https://githu
 - **Multi-Language Support**: Extensible architecture supporting multiple programming languages
 - **Agent Lifecycle Management**: Dynamic registration and management of agent factories and instances
 - **Multiple Communication Patterns**: Support for both pub/sub and RPC-style messaging
+- **Distributed Memory**: Kafka-based memory implementation for sharing state across agent instances
 - **Streaming Processing**: Asynchronous event processing for high-throughput scenarios
 - **Schema Support**: Standardized message serialization with CloudEvents support
 - **Observability**: Integrated tracing and monitoring capabilities
@@ -35,17 +36,34 @@ autogen-kafka/
 │   │   └── autogen-kafka-extension/     # Core Python extension package
 │   │       ├── src/
 │   │       │   └── autogen_kafka_extension/
-│   │       │       ├── worker_runtime.py           # Main runtime implementation
-│   │       │       ├── worker_config.py            # Configuration classes
-│   │       │       ├── streaming_service.py        # Kafka streaming service
-│   │       │       ├── message_processor.py        # Message processing logic
-│   │       │       ├── messaging_client.py         # Kafka messaging client
-│   │       │       ├── agent_registry.py           # Agent registration management
-│   │       │       ├── agent_manager.py            # Agent lifecycle management
-│   │       │       ├── subscription_service.py     # Subscription management
-│   │       │       ├── events/                     # Event handling and serialization
-│   │       │       └── ...                         # Additional components
+│   │       │       ├── memory/                      # Distributed memory implementation
+│   │       │       │   ├── kafka_memory.py         # Kafka-based memory provider
+│   │       │       │   └── memory_config.py        # Memory configuration
+│   │       │       ├── runtimes/                   # Agent runtime implementations
+│   │       │       │   ├── worker_runtime.py       # Main Kafka worker runtime
+│   │       │       │   ├── worker_config.py        # Worker configuration classes
+│   │       │       │   ├── messaging_client.py     # Kafka messaging client
+│   │       │       │   └── services/               # Runtime service components
+│   │       │       │       ├── agent_manager.py    # Agent lifecycle management
+│   │       │       │       ├── agent_registry.py   # Agent registration management
+│   │       │       │       ├── message_processor.py # Message processing logic
+│   │       │       │       └── subscription_service.py # Subscription management
+│   │       │       ├── shared/                     # Shared components and utilities
+│   │       │       │   ├── events/                 # Event definitions and serialization
+│   │       │       │   │   ├── memory_event.py     # Memory synchronization events
+│   │       │       │   │   ├── request_event.py    # Agent request events
+│   │       │       │   │   ├── response_event.py   # Agent response events
+│   │       │       │   │   ├── registration_event.py # Agent registration events
+│   │       │       │   │   └── subscription_event.py # Subscription events
+│   │       │       │   ├── kafka_config.py         # Base Kafka configuration
+│   │       │       │   ├── streaming_service.py    # Kafka streaming service
+│   │       │       │   ├── streaming_worker_base.py # Base streaming worker class
+│   │       │       │   └── topic_admin_service.py  # Topic administration
+│   │       │       └── py.typed                    # Type hints marker
 │   │       ├── tests/                   # Package tests
+│   │       │   ├── test_kafka_memory.py # Memory implementation tests
+│   │       │   ├── test_worker_runtime.py # Runtime tests
+│   │       │   └── utils.py            # Test utilities
 │   │       └── pyproject.toml          # Package configuration
 │   └── README.md                       # Python-specific implementation guide
 ├── dotnet/                             # Future C# implementation
@@ -88,6 +106,15 @@ The extension provides language-specific implementations of agent runtimes that:
 - **Topic Broadcasting**: Publish-subscribe patterns for event distribution
 - **Request-Response**: RPC-style interactions with response correlation
 - **Event Streaming**: Continuous processing of event streams
+
+### Distributed Memory
+
+The extension provides a Kafka-based memory implementation (`KafkaMemory`) that enables:
+- **Shared State**: Memory content synchronized across multiple agent instances
+- **Session Isolation**: Each memory session uses dedicated Kafka topics for isolation
+- **Persistence**: Memory state persisted in Kafka topics for durability
+- **Event Synchronization**: Real-time memory updates broadcast to all instances
+- **Flexible Backend**: Wraps existing memory implementations (e.g., `ListMemory`)
 
 ### Configuration Management
 
@@ -189,6 +216,7 @@ The extension uses standardized topic naming conventions:
 - `agent.responses` - Response correlation
 - `agent.subscription` - Agent subscription events
 - `agent.registry` - Agent lifecycle events
+- `memory.<session_id>` - Distributed memory synchronization (per session)
 
 ### Message Formats
 
@@ -200,9 +228,10 @@ All implementations use CloudEvents-compatible message formats for:
 
 ## 📈 Roadmap
 
-- [ ] Complete Python implementation with full AutoGen integration
+- [x] Complete Python implementation with full AutoGen integration
+- [x] Kafka-based distributed memory implementation
 - [ ] Schema registry integration
-- [ ] Agent state persistence
+- [ ] Agent state persistence enhancements
 - [ ] Comprehensive documentation and examples
 - [ ] C# implementation planning and design
 - [ ] C# implementation with .NET AutoGen integration
