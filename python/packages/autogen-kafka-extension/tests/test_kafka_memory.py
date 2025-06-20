@@ -63,6 +63,41 @@ async def test_distributed_add(kafka_connection: str, memory: ListMemory):
     result = await kafka_memory_2.query(query="test")
     assert ( result.results[0].content == "test" )
 
+@pytest.mark.asyncio
+async def test_distributed_add(kafka_connection: str, memory: ListMemory):
+    session_id = "test"
+    kafka_memory = KafkaMemory(
+        config=create_worker_config(kafka_connection, "test", "test"),
+        session_id=session_id,
+        memory=memory
+    )
+    await kafka_memory.start()
+    await asyncio.sleep(3)
+
+    await kafka_memory.add(content = MemoryContent(
+        content="test",
+        mime_type=MemoryMimeType.TEXT,
+        metadata={"source": "test"}
+    ))
+    result = await kafka_memory.query(query="test")
+    assert ( result.results[0].content == "test" )
+
+    await kafka_memory.clear()
+
+    result = await kafka_memory.query(query="test")
+    assert len(result.results) == 0
+
+    kafka_memory = KafkaMemory(
+        config=create_worker_config(kafka_connection, "test_2", "test_2"),
+        session_id=session_id,
+        memory=memory
+    )
+    await kafka_memory.start()
+    await asyncio.sleep(3)
+
+    result = await kafka_memory.query(query="test")
+    assert len(result.results) == 0
+
 def create_worker_config(
     connection: str,
     group_suffix: str,
