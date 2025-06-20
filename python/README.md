@@ -8,6 +8,7 @@ A scalable, event-driven Python runtime for autonomous agents powered by Apache 
 
 - **Agent Lifecycle Management** – Dynamically register agent factories and instances
 - **Kafka Message Routing** – Built-in pub/sub and RPC using Kafka topics
+- **Distributed Memory** – Kafka-based memory sharing across agent instances with session isolation
 - **Streaming Engine** – Uses `kstreams` for asynchronous event processing
 - **Serialization & Schema Support** – JSON and CloudEvents-based payloads
 - **Observability** – Integrated OpenTelemetry tracing for monitoring and debugging
@@ -75,28 +76,30 @@ Here's a simple example to get the runtime started:
 
 ```python
 import asyncio
-from autogen_kafka_extension.worker_config import WorkerConfig
-from autogen_kafka_extension.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+
 
 async def main():
-    # Configure the runtime
-    config = WorkerConfig(
-        request_topic="agent.requests",
-        subscription_topic="agent.responses",
-        group_id="worker-group",
-        client_id="worker-client",
-        title="Python Agent Runtime"
-    )
+   # Configure the runtime
+   config = WorkerConfig(
+      request_topic="agent.requests",
+      subscription_topic="agent.responses",
+      group_id="worker-group",
+      client_id="worker-client",
+      title="Python Agent Runtime"
+   )
 
-    # Create and start the runtime
-    runtime = KafkaWorkerAgentRuntime(config)
-    await runtime.start()
-    
-    # Runtime is now ready for agent registration and messaging
-    return runtime
+   # Create and start the runtime
+   runtime = KafkaWorkerAgentRuntime(config)
+   await runtime.start()
+
+   # Runtime is now ready for agent registration and messaging
+   return runtime
+
 
 if __name__ == "__main__":
-    runtime = asyncio.run(main())
+   runtime = asyncio.run(main())
 ```
 
 ---
@@ -220,6 +223,349 @@ await runtime.register_factory(
 
 ---
 
+## 🧠 Distributed Memory with Kafka
+
+The AutoGen Kafka Extension provides a distributed memory implementation (`KafkaMemory`) that uses Apache Kafka for persistence and synchronization across multiple agent instances. This enables agents to share memory state in distributed environments.
+
+### Key Features
+
+- **Distributed Memory Sharing**: Multiple agent instances can share the same memory state
+- **Kafka-based Persistence**: Memory content is stored in Kafka topics for durability
+- **Session-based Isolation**: Different sessions maintain separate memory spaces
+- **Event-driven Synchronization**: Real-time memory updates across instances
+- **Async Context Manager**: Proper resource management and cleanup
+- **Multiple Content Types**: Support for text, JSON, images, and binary content
+
+### Basic Usage
+
+```python
+import asyncio
+from autogen_core.memory import MemoryContent, MemoryMimeType
+from autogen_kafka_extension.memory.kafka_memory import KafkaMemory
+from autogen_kafka_extension.memory.memory_config import MemoryConfig
+
+async def setup_distributed_memory():
+    # Configure Kafka memory
+    config = MemoryConfig(
+        name="memory-worker",
+        group_id="memory-group",
+        client_id="memory-client",
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="agent-memory"
+    )
+    
+    # Create memory instance with session isolation
+    session_id = "agent-session-001"
+    
+    # Option 1: Using async context manager (recommended)
+    async with KafkaMemory(config, session_id) as memory:
+        # Memory is automatically started and will be cleaned up
+        # Add content to memory
+        await memory.add(MemoryContent(
+            content="Important conversation context",
+            mime_type=MemoryMimeType.TEXT,
+            metadata={"source": "conversation", "timestamp": "2024-01-01"}
+        ))
+        
+        # Query memory
+        result = await memory.query("conversation")
+        print(f"Found {len(result.results)} relevant memories")
+        
+        # Memory is automatically synchronized across all instances
+        # with the same session_id
+        
+    # Memory is properly cleaned up when exiting context
+    
+    # Option 2: Manual start/close (for long-lived instances)
+    memory = KafkaMemory(config, session_id)
+    await memory.start()  # Must call start() explicitly
+    
+    try:
+        # Use memory...
+        await memory.add(MemoryContent(
+            content="Another memory entry",
+            mime_type=MemoryMimeType.TEXT
+        ))
+        result = await memory.query("memory")
+        print(f"Found {len(result.results)} memories")
+    finally:
+        await memory.close()  # Must call close() explicitly
+```
+
+### Advanced Memory Configuration
+
+```python
+from autogen_core.memory import ListMemory
+
+# Use custom underlying memory implementation
+custom_memory = ListMemory()
+
+config = MemoryConfig(
+    name="advanced-memory",
+    group_id="memory-group",
+    client_id="memory-client-001",
+    bootstrap_servers=["kafka-cluster:9092"],
+    memory_topic="agent-memory",
+    replication_factor=3,  # For production environments
+    
+    # Kafka security settings
+    security_protocol="SASL_SSL",
+    security_mechanism="PLAIN",
+    sasl_plain_username="your_username",
+    sasl_plain_password="your_password"
+)
+
+async with KafkaMemory(config, "production-session", memory=custom_memory) as memory:
+    # Memory is automatically started when entering context
+    # Advanced memory operations
+    await memory.add(MemoryContent(
+        content="Production data",
+        mime_type=MemoryMimeType.TEXT,
+        metadata={"environment": "prod"}
+    ))
+    
+    # Memory will be automatically closed when exiting context
+```
+
+### Multi-Instance Memory Sharing
+
+```python
+async def demonstrate_distributed_memory():
+    """Show how multiple instances share memory state."""
+    
+    config = MemoryConfig(
+        name="shared-memory",
+        group_id="memory-group",
+        client_id="instance-1",
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="shared-memory"
+    )
+    
+    session_id = "shared-session"
+    
+    # Instance 1: Add content
+    async with KafkaMemory(config, session_id) as memory1:
+        # Memory1 is automatically started
+        await memory1.add(MemoryContent(
+            content="Shared knowledge base entry",
+            mime_type=MemoryMimeType.TEXT,
+            metadata={"category": "facts"}
+        ))
+        
+        # Configure second instance
+        config2 = MemoryConfig(
+            name="shared-memory",
+            group_id="memory-group",
+            client_id="instance-2",  # Different client
+            bootstrap_servers=["localhost:9092"],
+            memory_topic="shared-memory"
+        )
+        
+        # Instance 2: Access same memory
+        async with KafkaMemory(config2, session_id) as memory2:
+            # Memory2 is automatically started and syncs with memory1
+            # Content added by instance1 is available here
+            result = await memory2.query("knowledge")
+            assert len(result.results) > 0
+            print("Memory successfully shared between instances!")
+```
+
+### Session Isolation
+
+```python
+async def demonstrate_session_isolation():
+    """Show how different sessions maintain separate memory spaces."""
+    
+    config = MemoryConfig(
+        name="isolated-memory",
+        group_id="memory-group",
+        client_id="client",
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="isolated-memory"
+    )
+    
+    # Two different sessions
+    session_a = "session-a"
+    session_b = "session-b"
+    
+    # Add content to session A
+    async with KafkaMemory(config, session_a) as memory_a:
+        await memory_a.add(MemoryContent(
+            content="Session A private data",
+            mime_type=MemoryMimeType.TEXT
+        ))
+    
+    # Add different content to session B
+    async with KafkaMemory(config, session_b) as memory_b:
+        await memory_b.add(MemoryContent(
+            content="Session B private data",
+            mime_type=MemoryMimeType.TEXT
+        ))
+        
+        # Sessions cannot access each other's data
+        result = await memory_b.query("Session A")
+        assert len(result.results) == 0  # No cross-session access
+```
+
+### Content Types and Metadata
+
+```python
+from autogen_core import Image
+import json
+
+async def demonstrate_content_types():
+    """Show support for various content types."""
+    
+    config = MemoryConfig(
+        name="content-memory",
+        group_id="memory-group", 
+        client_id="content-client",
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="content-memory"
+    )
+    
+    async with KafkaMemory(config, "content-session") as memory:
+        # Text content
+        await memory.add(MemoryContent(
+            content="This is text content",
+            mime_type=MemoryMimeType.TEXT,
+            metadata={"type": "note", "priority": "high"}
+        ))
+        
+        # JSON content
+        await memory.add(MemoryContent(
+            content={"key": "value", "data": [1, 2, 3]},
+            mime_type=MemoryMimeType.JSON,
+            metadata={"schema_version": "1.0"}
+        ))
+        
+        # Image content
+        image = Image.from_base64("base64_encoded_image_data")
+        await memory.add(MemoryContent(
+            content=image,
+            mime_type=MemoryMimeType.IMAGE,
+            metadata={"format": "png", "size": "1024x768"}
+        ))
+        
+        # Binary content
+        await memory.add(MemoryContent(
+            content=b"binary data",
+            mime_type=MemoryMimeType.BINARY,
+            metadata={"encoding": "raw"}
+        ))
+```
+
+### Integration with Agent Runtime
+
+```python
+from autogen_core.agent import Agent
+from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+
+class MemoryEnabledAgent(Agent):
+    """Agent that uses distributed Kafka memory."""
+    
+    def __init__(self, memory: KafkaMemory):
+        self._memory = memory
+    
+    async def on_message(self, message, ctx):
+        # Store conversation in distributed memory
+        await self._memory.add(MemoryContent(
+            content=f"Conversation: {message.content}",
+            mime_type=MemoryMimeType.TEXT,
+            metadata={"timestamp": str(ctx.timestamp)}
+        ))
+        
+        # Query relevant memories
+        relevant = await self._memory.query(message.content)
+        
+        # Use memory context in response
+        context = "\n".join([mem.content for mem in relevant.results])
+        response = f"Based on memory: {context}\nResponse: {message.content}"
+        
+        return response
+
+# Setup runtime with memory-enabled agents
+async def setup_memory_enabled_runtime():
+    # Setup runtime
+    runtime_config = WorkerConfig(
+        request_topic="agent.requests",
+        subscription_topic="agent.responses",
+        group_id="runtime-group",
+        client_id="runtime-client"
+    )
+    
+    runtime = KafkaWorkerAgentRuntime(runtime_config)
+    
+    # Setup shared memory
+    memory_config = MemoryConfig(
+        name="agent-memory",
+        group_id="memory-group",
+        client_id="memory-client",
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="agent-shared-memory"
+    )
+    
+    memory = KafkaMemory(memory_config, "agent-session")
+    await memory.start()
+    
+    # Register memory-enabled agent
+    await runtime.register_factory(
+        "memory_agent",
+        lambda: MemoryEnabledAgent(memory)
+    )
+    
+    await runtime.start()
+    return runtime, memory
+```
+
+### Memory Management Operations
+
+```python
+async def memory_management_examples():
+    """Examples of memory management operations."""
+    
+    config = MemoryConfig(
+        name="mgmt-memory",
+        group_id="memory-group",
+        client_id="mgmt-client", 
+        bootstrap_servers=["localhost:9092"],
+        memory_topic="management-memory"
+    )
+    
+    async with KafkaMemory(config, "mgmt-session") as memory:
+        # Add multiple entries
+        for i in range(5):
+            await memory.add(MemoryContent(
+                content=f"Entry {i}",
+                mime_type=MemoryMimeType.TEXT,
+                metadata={"index": i}
+            ))
+        
+        # Query all entries
+        all_entries = await memory.query("Entry")
+        print(f"Total entries: {len(all_entries.results)}")
+        
+        # Clear all memory (synchronized across instances)
+        await memory.clear()
+        
+        # Verify memory is cleared
+        after_clear = await memory.query("Entry")
+        assert len(after_clear.results) == 0
+        print("Memory successfully cleared")
+```
+
+### Best Practices
+
+- **Memory Initialization**: Always start KafkaMemory before use - either with `async with` context manager (recommended) or explicit `await memory.start()`
+- **Session Management**: Use meaningful session IDs to organize memory by conversation, user, or task context
+- **Memory Cleanup**: Always use async context managers or explicitly call `close()` for proper cleanup
+- **Content Organization**: Use metadata fields to organize and categorize memory content
+- **Performance**: Consider memory size and query patterns when designing your memory strategy
+- **Security**: Ensure proper Kafka security configuration for sensitive memory content
+- **Monitoring**: Monitor Kafka topic size and consumer lag for memory performance insights
+
+---
+
 ## ⚙️ Configuration Options
 
 The `WorkerConfig` class provides extensive configuration options:
@@ -247,33 +593,33 @@ config = WorkerConfig(
 ### Advanced Configuration
 
 ```python
-from autogen_kafka_extension.worker_config import KafkaConfig
+from autogen_kafka_extension.runtimes.worker_config import KafkaConfig
 
 # Advanced Kafka configuration
 kafka_config = KafkaConfig(
-    bootstrap_servers="kafka-cluster:9092",
-    security_protocol="SASL_SSL",
-    sasl_mechanism="PLAIN",
-    sasl_username="your_username",
-    sasl_password="your_password",
-    
-    # Performance tuning
-    batch_size=16384,
-    linger_ms=100,
-    compression_type="gzip",
-    
-    # Consumer settings
-    session_timeout_ms=30000,
-    heartbeat_interval_ms=10000,
-    max_poll_records=500,
+   bootstrap_servers="kafka-cluster:9092",
+   security_protocol="SASL_SSL",
+   sasl_mechanism="PLAIN",
+   sasl_username="your_username",
+   sasl_password="your_password",
+
+   # Performance tuning
+   batch_size=16384,
+   linger_ms=100,
+   compression_type="gzip",
+
+   # Consumer settings
+   session_timeout_ms=30000,
+   heartbeat_interval_ms=10000,
+   max_poll_records=500,
 )
 
 config = WorkerConfig(
-    request_topic="agent.requests",
-    subscription_topic="agent.responses",
-    group_id="worker-group",
-    client_id="worker-client",
-    kafka_config=kafka_config
+   request_topic="agent.requests",
+   subscription_topic="agent.responses",
+   group_id="worker-group",
+   client_id="worker-client",
+   kafka_config=kafka_config
 )
 ```
 
@@ -313,6 +659,10 @@ PYTHONPATH=tests:src uv run python -m pytest tests/ --cov=autogen_kafka_extensio
 
 # Run with verbose output
 PYTHONPATH=tests:src uv run python -m pytest tests/ -v
+
+# Run specific test categories
+PYTHONPATH=tests:src uv run python -m pytest tests/test_kafka_memory.py -v  # Memory tests
+PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py -v  # Runtime tests
 
 # Use the provided test script
 ./run_tests.sh
@@ -362,6 +712,7 @@ PYTHONPATH=tests:src uv run python -m pytest tests/ --benchmark-only
 ### Architecture Components
 
 - **`KafkaWorkerAgentRuntime`**: Main runtime class extending AutoGen's AgentRuntime
+- **`KafkaMemory`**: Distributed memory implementation using Kafka for persistence and synchronization
 - **`StreamingService`**: Kafka stream processing using kstreams
 - **`MessageProcessor`**: Handles message routing and processing logic
 - **`AgentRegistry`**: Manages agent factory and instance registration
@@ -372,23 +723,33 @@ PYTHONPATH=tests:src uv run python -m pytest tests/ --benchmark-only
 
 ```
 src/autogen_kafka_extension/
-├── worker_runtime.py           # Main runtime implementation
-├── worker_config.py            # Configuration classes
-├── streaming_service.py        # Kafka streaming service
-├── message_processor.py        # Message processing logic
-├── messaging_client.py         # Kafka messaging client
-├── agent_registry.py           # Agent registration management
-├── agent_manager.py            # Agent lifecycle management
-├── subscription_service.py     # Subscription management
-├── topic_admin.py              # Kafka topic administration
-├── background_task_manager.py  # Background task handling
-├── constants.py                # Shared constants
-└── events/                     # Event handling and serialization
-    ├── message_serdes.py       # Message serialization/deserialization
-    ├── request_event.py        # Request event structures
-    ├── response_event.py       # Response event structures
-    ├── subscription_event.py   # Subscription events
-    └── registration_event.py   # Registration events
+├── runtimes/                   # Runtime implementations
+│   ├── worker_runtime.py       # Main runtime implementation
+│   ├── worker_config.py        # Configuration classes
+│   ├── messaging_client.py     # Kafka messaging client
+│   └── services/               # Runtime services
+│       ├── agent_manager.py    # Agent lifecycle management
+│       ├── agent_registry.py   # Agent registration management
+│       ├── background_task_manager.py  # Background task handling
+│       ├── message_processor.py # Message processing logic
+│       ├── subscription_service.py # Subscription management
+│       └── constants.py        # Shared constants
+├── memory/                     # Distributed memory implementation
+│   ├── kafka_memory.py         # Main memory class with Kafka persistence
+│   └── memory_config.py        # Memory configuration
+├── shared/                     # Shared components
+│   ├── streaming_service.py    # Kafka streaming service
+│   ├── streaming_worker_base.py # Base streaming worker
+│   ├── topic_admin_service.py  # Kafka topic administration
+│   ├── kafka_config.py         # Kafka configuration
+│   └── events/                 # Event handling and serialization
+│       ├── events_serdes.py    # Event serialization/deserialization
+│       ├── memory_event.py     # Memory event structures
+│       ├── request_event.py    # Request event structures
+│       ├── response_event.py   # Response event structures
+│       ├── subscription_event.py # Subscription events
+│       └── registration_event.py # Registration events
+└── py.typed                    # Type checking support
 ```
 
 ### Debugging and Monitoring
@@ -403,18 +764,20 @@ src/autogen_kafka_extension/
 #### Custom Message Serialization
 
 ```python
-from autogen_kafka_extension.events.message_serdes import MessageSerDes
+from autogen_kafka_extension.shared.events import MessageSerDes
+
 
 class CustomSerDes(MessageSerDes):
-    """Custom message serialization for specific use cases."""
-    
-    def serialize(self, message: Message) -> bytes:
-        # Implement custom serialization
-        pass
-    
-    def deserialize(self, data: bytes) -> Message:
-        # Implement custom deserialization
-        pass
+   """Custom message serialization for specific use cases."""
+
+   def serialize(self, message: Message) -> bytes:
+      # Implement custom serialization
+      pass
+
+   def deserialize(self, data: bytes) -> Message:
+      # Implement custom deserialization
+      pass
+
 
 # Use custom serializer
 runtime = KafkaWorkerAgentRuntime(config, message_serdes=CustomSerDes())
@@ -423,20 +786,21 @@ runtime = KafkaWorkerAgentRuntime(config, message_serdes=CustomSerDes())
 #### Custom Agent Middleware
 
 ```python
-from autogen_kafka_extension.message_processor import MessageProcessor
+from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
+
 
 class CustomMessageProcessor(MessageProcessor):
-    """Custom message processing with additional middleware."""
-    
-    async def process_message(self, message: Message, context) -> Message:
-        # Add custom preprocessing
-        message = await self.preprocess(message)
-        
-        # Call parent processing
-        result = await super().process_message(message, context)
-        
-        # Add custom postprocessing
-        return await self.postprocess(result)
+   """Custom message processing with additional middleware."""
+
+   async def process_message(self, message: Message, context) -> Message:
+      # Add custom preprocessing
+      message = await self.preprocess(message)
+
+      # Call parent processing
+      result = await super().process_message(message, context)
+
+      # Add custom postprocessing
+      return await self.postprocess(result)
 ```
 
 ---
@@ -518,11 +882,12 @@ async def deploy_runtime_cluster():
 - [x] Comprehensive test coverage with testcontainers
 - [x] Agent factory and instance registration
 - [x] Pub/sub and RPC messaging patterns
+- [x] Distributed Kafka-based memory with session isolation
 
 ### In Progress
-- [ ] Enhanced agent state persistence mechanisms
 - [ ] Performance optimizations for high-throughput scenarios
 - [ ] Advanced CLI tools for monitoring and debugging
+- [ ] Enhanced memory query capabilities and indexing
 
 ### Planned Features
 - [ ] Agent metadata and discovery service
@@ -565,7 +930,7 @@ async def deploy_runtime_cluster():
 3. **Message Delivery Issues**
    ```python
    # Check topic health
-   from autogen_kafka_extension.topic_admin_service import TopicAdminService
+   from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
    
    admin = TopicAdminService(config.kafka_config)
    topics = await admin.list_topics()

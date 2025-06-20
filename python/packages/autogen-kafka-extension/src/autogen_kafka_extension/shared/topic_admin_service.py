@@ -5,9 +5,52 @@ from confluent_kafka import KafkaException, KafkaError
 from confluent_kafka.admin import ClusterMetadata
 from confluent_kafka.cimpl import NewTopic
 
-from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.shared.kafka_config import KafkaConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _handle_topic_creation_result(futures: dict, topic_names: list[str]) -> None:
+    """Handle the results of topic creation futures.
+
+    This private method processes the Future objects returned by the Kafka admin
+    client's create_topics operation. It waits for each future to complete and
+    handles both successful creation and various error conditions. Topics that
+    already exist are logged as debug messages, while other errors are logged
+    as errors and re-raised.
+
+    Args:
+        futures: Dictionary mapping topic names to their creation Future objects
+                returned by the admin client's create_topics method. Each Future
+                represents the asynchronous topic creation operation.
+        topic_names: List of topic names that were requested to be created.
+                    Used to verify that all requested topics have corresponding
+                    futures and for error reporting.
+
+    Raises:
+        Exception: If any topic name doesn't have a corresponding future
+        KafkaException: If topic creation fails for reasons other than topic
+                       already existing (e.g., insufficient permissions, invalid
+                       topic configuration, broker connectivity issues)
+        Exception: For any other unexpected errors during topic creation
+    """
+    for topic_name in topic_names:
+        if topic_name not in futures:
+            error_msg = f"Failed to create topic {topic_name}. No future returned."
+            logger.error(error_msg)
+            raise Exception(error_msg)
+
+        try:
+            futures[topic_name].result()
+        except KafkaException as e:
+            if e.args[0] == KafkaError.TOPIC_ALREADY_EXISTS:
+                logger.debug(f"Topic {topic_name} already exists")
+            else:
+                logger.error(f"Failed to create topic {topic_name}: {e}")
+                raise
+        except Exception as e:
+            logger.error(f"Failed to create topic {topic_name}: {e}")
+            raise
 
 
 class TopicAdminService:
@@ -33,7 +76,7 @@ class TopicAdminService:
         _admin_client: The underlying Kafka admin client for operations
     """
 
-    def __init__(self, config: WorkerConfig) -> None:
+    def __init__(self, config: KafkaConfig) -> None:
         """Initialize TopicAdmin with worker configuration.
         
         Sets up the admin client using the provided WorkerConfig which contains
@@ -71,50 +114,11 @@ class TopicAdminService:
         return NewTopic(
             topic=topic_name,
             num_partitions=self._config.num_partitions,
-            replication_factor=self._config.replication_factor
+            replication_factor=self._config.replication_factor,
+            config = {
+                "cleanup.policy": "compact" if self._config.is_compacted else "delete"
+            }
         )
-
-    def _handle_topic_creation_result(self, futures: dict, topic_names: list[str]) -> None:
-        """Handle the results of topic creation futures.
-        
-        This private method processes the Future objects returned by the Kafka admin
-        client's create_topics operation. It waits for each future to complete and
-        handles both successful creation and various error conditions. Topics that
-        already exist are logged as debug messages, while other errors are logged
-        as errors and re-raised.
-        
-        Args:
-            futures: Dictionary mapping topic names to their creation Future objects
-                    returned by the admin client's create_topics method. Each Future
-                    represents the asynchronous topic creation operation.
-            topic_names: List of topic names that were requested to be created.
-                        Used to verify that all requested topics have corresponding
-                        futures and for error reporting.
-                        
-        Raises:
-            Exception: If any topic name doesn't have a corresponding future
-            KafkaException: If topic creation fails for reasons other than topic
-                           already existing (e.g., insufficient permissions, invalid
-                           topic configuration, broker connectivity issues)
-            Exception: For any other unexpected errors during topic creation
-        """
-        for topic_name in topic_names:
-            if topic_name not in futures:
-                error_msg = f"Failed to create topic {topic_name}. No future returned."
-                logger.error(error_msg)
-                raise Exception(error_msg)
-            
-            try:
-                futures[topic_name].result()
-            except KafkaException as e:
-                if e.args[0] == KafkaError.TOPIC_ALREADY_EXISTS:
-                    logger.debug(f"Topic {topic_name} already exists")
-                else:
-                    logger.error(f"Failed to create topic {topic_name}: {e}")
-                    raise
-            except Exception as e:
-                logger.error(f"Failed to create topic {topic_name}: {e}")
-                raise
 
     def create_topic(self, topic_name: str) -> None:
         """Create a single Kafka topic.
@@ -147,7 +151,7 @@ class TopicAdminService:
         
         try:
             futures = self._admin_client.create_topics([new_topic])
-            self._handle_topic_creation_result(futures, [topic_name])
+            _handle_topic_creation_result(futures, [topic_name])
             logger.info(f"Successfully processed topic creation for: {topic_name}")
         except Exception:
             # Re-raise the exception as it's already logged in _handle_topic_creation_result
@@ -193,10 +197,52 @@ class TopicAdminService:
         
         try:
             futures = self._admin_client.create_topics(new_topics)
-            self._handle_topic_creation_result(futures, topic_names)
+            _handle_topic_creation_result(futures, topic_names)
             logger.info(f"Successfully processed topic creation for: {topic_names}")
         except Exception:
             # Re-raise the exception as it's already logged in _handle_topic_creation_result
+            raise
+
+    def delete_topics(self, topic_names: list[str]) -> None:
+        """Delete multiple Kafka topics.
+
+        Deletes specified Kafka topics in a single batch operation. This method
+        allows for efficient removal of multiple topics at once, rather than
+        deleting them one by one.
+
+        If any topic does not exist, it is skipped (idempotent behavior).
+        If deletion of any topic fails, the method raises an exception but other
+        topics in the batch may still be deleted successfully.
+
+        Args:
+            topic_names: List of topic names to delete from Kafka. Each name must
+                        follow Kafka topic naming conventions. Empty list is
+                        handled gracefully with a warning log.
+
+        Raises:
+            KafkaException: If any topic deletion fails due to Kafka-related errors
+                           such as insufficient permissions, invalid configuration,
+                           or broker connectivity issues
+            Exception: For any other unexpected errors during topic deletion
+
+        Example:
+            admin = TopicAdmin(config)
+            admin.delete_topics(["user-events", "order-events"])
+        """
+        if not topic_names:
+            logger.warning("No topics provided for deletion")
+            return
+
+        try:
+            futures = self._admin_client.delete_topics(topic_names)
+            for topic_name in topic_names:
+                if topic_name in futures:
+                    futures[topic_name].result()
+                    logger.info(f"Successfully deleted topic: {topic_name}")
+                else:
+                    logger.warning(f"Topic {topic_name} not found for deletion")
+        except Exception as e:
+            logger.error(f"Failed to delete topics: {e}")
             raise
 
     def list_topics(self) -> dict[str, Any]:

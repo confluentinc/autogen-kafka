@@ -9,11 +9,12 @@ import json
 
 from kstreams.serializers import Serializer
 
-from autogen_kafka_extension.constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.events.registration_event import RegistrationEvent
-from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.events.subscription_event import SubscriptionEvent
+from autogen_kafka_extension.runtimes.services.constants import EVENT_TYPE_ATTR
+from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
+from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent
+from autogen_kafka_extension.shared.events.response_event import ResponseEvent
+from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent
 
 
 class EventDeserializer(middleware.BaseMiddleware):
@@ -69,6 +70,10 @@ class EventDeserializer(middleware.BaseMiddleware):
                     # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
                     values = json.loads(cr.value)
                     cr.value = ResponseEvent.from_dict(values)
+                elif evt_type == MemoryEvent.__name__:
+                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
+                    values = json.loads(cr.value)
+                    cr.value = MemoryEvent.from_dict(values)
                 elif evt_type == CloudEvent.__name__:
                     cr.value = CloudEvent(attributes=headers, data=cr.value)
             except ValueError as e:
@@ -124,7 +129,8 @@ class EventSerializer(Serializer):
         elif (not isinstance(payload, RequestEvent) and
               not isinstance(payload, RegistrationEvent) and
               not isinstance(payload, SubscriptionEvent) and
-              not isinstance(payload, ResponseEvent)):
+              not isinstance(payload, ResponseEvent) and
+              not isinstance(payload, MemoryEvent)):
             raise RuntimeError(f"Unsupported payload type: {type(payload)}")
 
         try:

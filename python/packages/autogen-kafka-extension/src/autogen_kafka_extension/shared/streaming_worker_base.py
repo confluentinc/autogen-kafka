@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Union
+from typing import Optional, Union, TypeVar, Generic
 from dataclasses import dataclass
 
 from autogen_core import AgentId, TopicId
@@ -9,19 +9,22 @@ from cloudevents.abstract import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.background_task_manager import BackgroundTaskManager
-from autogen_kafka_extension.events.registration_event import RegistrationEvent
-from autogen_kafka_extension.events.request_event import RequestEvent
-from autogen_kafka_extension.events.message_serdes import EventSerializer
-from autogen_kafka_extension.events.response_event import ResponseEvent
-from autogen_kafka_extension.streaming_service import StreamingService
-from autogen_kafka_extension.worker_config import WorkerConfig
+from autogen_kafka_extension.runtimes.services.background_task_manager import BackgroundTaskManager
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
+from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent
+from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.events.response_event import ResponseEvent
+from autogen_kafka_extension.shared.streaming_service import StreamingService
+from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
+from autogen_kafka_extension.shared.kafka_config import KafkaConfig
 
 logger = logging.getLogger(__name__)
 
-MessageType = Union[RequestEvent, CloudEvent, ResponseEvent, RegistrationEvent]
+MessageType = Union[RequestEvent, CloudEvent, ResponseEvent, RegistrationEvent, MemoryEvent]
 RecipientType = Union[AgentId, TopicId, str, None]
 
+T = TypeVar("T", bound=KafkaConfig)
 
 @dataclass
 class StreamConfiguration:
@@ -42,7 +45,7 @@ class StreamConfiguration:
     client_id: str
 
 
-class StreamingServiceManager:
+class StreamingServiceManager(Generic[T]):
     """Manages streaming service lifecycle and ownership.
     
     This class provides a wrapper around StreamingService to handle its lifecycle
@@ -60,7 +63,9 @@ class StreamingServiceManager:
         _is_started (bool): Current state of the streaming service.
     """
     
-    def __init__(self, streaming_service: Optional[StreamingService], config: WorkerConfig):
+    def __init__(self,
+                 streaming_service: Optional[StreamingService],
+                 config: T):
         """Initialize the streaming service manager.
         
         Args:
@@ -134,7 +139,7 @@ class StreamingServiceManager:
         self._is_started = False
 
 
-class StreamingWorkerBase:
+class StreamingWorkerBase(Generic[T]):
     """Base class for streaming workers with improved separation of concerns.
     
     This abstract base class provides the foundation for building streaming workers
@@ -161,8 +166,9 @@ class StreamingWorkerBase:
 
     def __init__(
         self,
-        config: WorkerConfig,
+        config: T,
         topic: str,
+        *,
         name: Optional[str] = None,
         serialization_registry: Optional[SerializationRegistry] = None,
         monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
@@ -272,8 +278,9 @@ class StreamingWorkerBase:
 
     async def send_message(
         self,
-        message: MessageType,
+        message: MessageType | None,
         topic: str,
+        *,
         recipient: RecipientType = None,
     ) -> None:
         """Send a message to Kafka with improved error handling and type safety.
@@ -293,7 +300,7 @@ class StreamingWorkerBase:
         Raises:
             RuntimeError: If the worker is not started or message sending fails.
         """
-        self._ensure_started()
+        await self._ensure_started()
         
         try:
             key = self._get_message_key(recipient)
@@ -309,7 +316,7 @@ class StreamingWorkerBase:
             logger.error(f"Failed to send message to topic '{topic}': {e}")
             raise RuntimeError(f"Failed to send message to topic '{topic}': {e}") from e
 
-    def _ensure_started(self) -> None:
+    async def _ensure_started(self) -> None:
         """Ensure the worker is started before performing operations.
         
         Internal helper method that validates the worker state before allowing
@@ -354,7 +361,7 @@ class StreamingWorkerBase:
             StreamConfiguration: Configuration object for setting up the Kafka stream.
         """
         return StreamConfiguration(
-            stream_name=f"{self._config.title}_{self._name}",
+            stream_name=f"{self._config.name}_{self._name}",
             topics=[self._topic],
             group_id=f"{self._config.group_id}_{self._name}",
             client_id=f"{self._config.client_id}_{self._name}"
@@ -374,7 +381,8 @@ class StreamingWorkerBase:
             topics=stream_config.topics,
             group_id=stream_config.group_id,
             client_id=stream_config.client_id,
-            func=self._handle_event
+            func=self._handle_event,
+            auto_offset_reset=self._config.auto_offset_reset
         )
         
         logger.debug(f"Stream configured for worker '{self._name}' on topics {stream_config.topics}")
