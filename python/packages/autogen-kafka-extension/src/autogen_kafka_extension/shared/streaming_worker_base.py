@@ -1,5 +1,6 @@
 import logging
-from typing import Optional, Union, TypeVar, Generic
+from abc import abstractmethod, ABC
+from typing import Optional, Union, TypeVar, Generic, Any
 from dataclasses import dataclass
 
 from autogen_core import AgentId, TopicId
@@ -7,9 +8,11 @@ from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper, MessageRuntimeTracingConfig
 from cloudevents.abstract import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
+from kstreams.middleware.middleware import MiddlewareProtocol
+from kstreams.serializers import Serializer
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.runtimes.services.background_task_manager import BackgroundTaskManager
+from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
@@ -139,7 +142,7 @@ class StreamingServiceManager(Generic[T]):
         self._is_started = False
 
 
-class StreamingWorkerBase(Generic[T]):
+class StreamingWorkerBase(ABC, Generic[T]):
     """Base class for streaming workers with improved separation of concerns.
     
     This abstract base class provides the foundation for building streaming workers
@@ -169,6 +172,7 @@ class StreamingWorkerBase(Generic[T]):
         config: T,
         topic: str,
         *,
+        deserializer: Optional[MiddlewareProtocol] = None,
         name: Optional[str] = None,
         serialization_registry: Optional[SerializationRegistry] = None,
         monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
@@ -191,6 +195,7 @@ class StreamingWorkerBase(Generic[T]):
                 instance or a TracerProvider. If None, creates a default TraceHelper.
             streaming_service (Optional[StreamingService]): An existing streaming
                 service to use. If None, a new service will be created internally.
+            deserializer (Optional[MiddlewareProtocol]): Optional deserializer for kafka messages.
         """
         self._config = config
         self._topic = topic
@@ -210,7 +215,7 @@ class StreamingWorkerBase(Generic[T]):
             self._trace_helper = monitoring
 
         # Setup stream
-        self._setup_event_stream()
+        self._setup_event_stream(deserializer)
 
     @property
     def name(self) -> str:
@@ -278,10 +283,11 @@ class StreamingWorkerBase(Generic[T]):
 
     async def send_message(
         self,
-        message: MessageType | None,
+        message: Any | None,
         topic: str,
         *,
         recipient: RecipientType = None,
+        serializer: Optional[Serializer] = None
     ) -> None:
         """Send a message to Kafka with improved error handling and type safety.
         
@@ -290,12 +296,12 @@ class StreamingWorkerBase(Generic[T]):
         and routing.
         
         Args:
-            message (MessageType): The message to send. Can be RequestEvent,
-                CloudEvent, ResponseEvent, or RegistrationEvent.
+            message (MessageType): The message to send.
             topic (str): The Kafka topic to send the message to.
             recipient (RecipientType, optional): The intended recipient of the
                 message. Can be AgentId, TopicId, string, or None. This is used
                 to generate the message key for partitioning.
+            serializer (Optional[Serializer]): Custom serializer for the message.
         
         Raises:
             RuntimeError: If the worker is not started or message sending fails.
@@ -309,7 +315,7 @@ class StreamingWorkerBase(Generic[T]):
                 value=message,
                 key=key,
                 headers={},
-                serializer=EventSerializer()
+                serializer=serializer if not serializer is None else EventSerializer()
             )
             logger.debug(f"Message sent successfully to topic '{topic}' with key '{key}'")
         except Exception as e:
@@ -352,7 +358,7 @@ class StreamingWorkerBase(Generic[T]):
         return str(recipient)
 
     def _create_stream_configuration(self) -> StreamConfiguration:
-        """Create stream configuration with proper naming.
+        """Create a stream configuration with proper naming.
         
         Generates a StreamConfiguration object with appropriate naming conventions
         that include the worker configuration and instance name to ensure uniqueness.
@@ -367,7 +373,7 @@ class StreamingWorkerBase(Generic[T]):
             client_id=f"{self._config.client_id}_{self._name}"
         )
 
-    def _setup_event_stream(self) -> None:
+    def _setup_event_stream(self, deserializer: Optional[MiddlewareProtocol] = None) -> None:
         """Configure the Kafka stream for subscription events.
         
         Internal method that sets up the Kafka stream using the streaming service.
@@ -382,11 +388,13 @@ class StreamingWorkerBase(Generic[T]):
             group_id=stream_config.group_id,
             client_id=stream_config.client_id,
             func=self._handle_event,
-            auto_offset_reset=self._config.auto_offset_reset
+            deserializer=deserializer,
+            auto_offset_reset = self._config.auto_offset_reset
         )
         
         logger.debug(f"Stream configured for worker '{self._name}' on topics {stream_config.topics}")
 
+    @abstractmethod
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
         """Handle incoming events. Must be implemented by subclasses.
         

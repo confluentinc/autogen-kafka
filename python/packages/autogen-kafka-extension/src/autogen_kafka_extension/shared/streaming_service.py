@@ -1,7 +1,9 @@
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional, List
 
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
+from kstreams.middleware import Middleware
+from kstreams.middleware.middleware import MiddlewareProtocol
 from kstreams.types import StreamFunc
 
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer, EventDeserializer
@@ -125,7 +127,10 @@ class StreamingService(StreamEngine):
         """
         self._topics_admin.create_topics(topic_names=topics)
 
-    def create_stream(self, stream_config: StreamConfig, func: StreamFunc) -> Stream:
+    def create_stream(self,
+                      stream_config: StreamConfig,
+                      func: StreamFunc,
+                      deserializer: Optional[MiddlewareProtocol] |None = None) -> Stream:
         """
         Create a Kafka stream with the given configuration.
         
@@ -141,6 +146,7 @@ class StreamingService(StreamEngine):
                              incoming messages. This function should accept the
                              message as its parameter and perform the desired
                              processing logic
+            deserializer (Optional[MiddlewareProtocol], optional): Optional deserializer
             
         Returns:
             Stream: A configured Stream object ready to be added to the engine
@@ -150,7 +156,7 @@ class StreamingService(StreamEngine):
             topics=stream_config.topics,
             name=stream_config.name,
             func=func,
-            middlewares=[middleware.Middleware(EventDeserializer)],
+            middlewares=[middleware.Middleware(deserializer if not deserializer is None else EventDeserializer)],
             config=stream_config.get_consumer_config(),
             backend=self.backend
         )
@@ -164,6 +170,7 @@ class StreamingService(StreamEngine):
                             func: StreamFunc,
                             auto_offset_reset: str,
                             *,
+                            deserializer: Optional[MiddlewareProtocol] |None = None,
                             auto_create_topics: bool = True,
                             enable_auto_commit: bool = True) -> Stream:
         """
@@ -208,7 +215,9 @@ class StreamingService(StreamEngine):
         )
 
         # Create and add the stream
-        stream = self.create_stream(stream_config, func)
+        stream = self.create_stream(stream_config=stream_config,
+                                    func=func,
+                                    deserializer=deserializer)
         self.add_stream(stream)
 
         return stream

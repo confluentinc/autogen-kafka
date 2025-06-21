@@ -3,10 +3,10 @@ from typing import Optional, Dict
 
 from aiokafka import ConsumerRecord
 from cloudevents.pydantic import CloudEvent
-from kstreams import middleware
 
 import json
 
+from kstreams.middleware.middleware import MiddlewareProtocol
 from kstreams.serializers import Serializer
 
 from autogen_kafka_extension.runtimes.services.constants import EVENT_TYPE_ATTR
@@ -17,7 +17,7 @@ from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent
 
 
-class EventDeserializer(middleware.BaseMiddleware):
+class EventDeserializer(MiddlewareProtocol):
     """
     Middleware for deserializing Kafka ConsumerRecord values into Message objects.
     """
