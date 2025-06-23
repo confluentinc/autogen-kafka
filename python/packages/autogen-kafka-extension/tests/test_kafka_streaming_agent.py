@@ -331,17 +331,34 @@ class TestKafkaStreamingAgent:
     @pytest.mark.asyncio
     async def test_save_state(self, agent):
         """Test save_state method."""
-        # The current implementation just passes, so we test that it doesn't raise
+        # Test initial state
         result = await agent.save_state()
-        assert result is None
+        assert result == {"next_request_id": 0}
+        
+        # Advance request ID and test again
+        await agent._get_new_request_id()
+        await agent._get_new_request_id()
+        result = await agent.save_state()
+        assert result == {"next_request_id": 2}
 
     @pytest.mark.asyncio
     async def test_load_state(self, agent):
         """Test load_state method."""
-        # The current implementation just passes, so we test that it doesn't raise
-        test_state = {"key": "value"}
+        # Test loading state with next_request_id
+        test_state = {"next_request_id": 5}
         result = await agent.load_state(test_state)
         assert result is None
+        
+        # Verify the request ID was updated
+        new_id = await agent._get_new_request_id()
+        assert new_id == "6"
+        
+        # Test loading state with higher ID doesn't override current higher ID
+        await agent._get_new_request_id()  # Should be 7
+        test_state = {"next_request_id": 3}  # Lower than current
+        await agent.load_state(test_state)
+        new_id = await agent._get_new_request_id()
+        assert new_id == "8"  # Should continue from current state
 
     @pytest.mark.asyncio
     async def test_close(self, agent):
