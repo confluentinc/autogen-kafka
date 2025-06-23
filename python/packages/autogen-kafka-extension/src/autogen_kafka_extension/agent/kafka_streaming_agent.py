@@ -16,7 +16,7 @@ from autogen_kafka_extension.shared.background_task_manager import BackgroundTas
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 
 
-class KafkaProxiedAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
+class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
 
     def __init__(self,
                  config: KafkaAgentConfig,
@@ -49,6 +49,7 @@ class KafkaProxiedAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
 
         event = AgentEvent(id = request_id, message=serialized, message_type=type_name)
 
+        # Send the event to the Kafka topic
         self._background_task_manager.add_task(
             StreamingWorkerBase.send_message(self,
                                              topic=self._config.request_topic,
@@ -65,7 +66,7 @@ class KafkaProxiedAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         pass
 
     async def close(self) -> None:
-        logging.info("Closing KafkaProxiedAgent and releasing resources.")
+        logging.info("Closing KafkaStreamingAgent and releasing resources.")
         await self._background_task_manager.wait_for_completion()
 
     async def _get_new_request_id(self) -> str:
@@ -80,7 +81,7 @@ class KafkaProxiedAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
         if record.value is None:
-            logging.error("Received None value in KafkaProxiedAgent event")
+            logging.error("Received None value in KafkaStreamingAgent event")
             return
         if not isinstance(record.value, AgentEvent):
             logging.error(f"Received invalid message type: {type(record.value)}")

@@ -6,10 +6,10 @@ from aiokafka import ConsumerRecord
 
 import json
 
-from kstreams.middleware.middleware import MiddlewareProtocol
+from kstreams.middleware.middleware import BaseMiddleware
 from kstreams.serializers import Serializer
 
-class AgentEventDeserializer(MiddlewareProtocol):
+class AgentEventDeserializer(BaseMiddleware):
     """
     Middleware for deserializing Kafka ConsumerRecord values into Message objects.
     """

@@ -2,7 +2,6 @@ from dataclasses import dataclass
 from typing import Any, Optional, List
 
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
-from kstreams.middleware import Middleware
 from kstreams.middleware.middleware import MiddlewareProtocol
 from kstreams.types import StreamFunc
 
@@ -152,11 +151,13 @@ class StreamingService(StreamEngine):
             Stream: A configured Stream object ready to be added to the engine
                    and started for message processing
         """
+        middleware_type = middleware.Middleware(deserializer if deserializer is not None else EventDeserializer)
+
         stream = Stream(
             topics=stream_config.topics,
             name=stream_config.name,
             func=func,
-            middlewares=[middleware.Middleware(deserializer if not deserializer is None else EventDeserializer)],
+            middlewares=[middleware_type],
             config=stream_config.get_consumer_config(),
             backend=self.backend
         )

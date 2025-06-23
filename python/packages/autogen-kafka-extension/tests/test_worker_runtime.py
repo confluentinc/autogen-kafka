@@ -84,6 +84,7 @@ async def setup_multiple_workers(kafka_connection: str, worker_count: int = 2):
         config = create_worker_config(kafka_connection, str(i), str(i))
         worker = KafkaWorkerAgentRuntime(config=config)
         await worker.start()
+        await asyncio.sleep(3)  # Allow time for worker to start
         workers.append(worker)
     return workers
 
