@@ -43,7 +43,6 @@ class TestKafkaStreamingAgent:
     def agent(self, mock_config):
         """Create a KafkaStreamingAgent instance for testing."""
         with patch('autogen_kafka_extension.agent.kafka_streaming_agent.SerializationRegistry'), \
-             patch('autogen_kafka_extension.agent.kafka_streaming_agent.AgentEventDeserializer'), \
              patch('autogen_kafka_extension.agent.kafka_streaming_agent.StreamingWorkerBase.__init__'):
             
             agent = KafkaStreamingAgent(
@@ -70,7 +69,6 @@ class TestKafkaStreamingAgent:
     def test_init(self, mock_config):
         """Test KafkaStreamingAgent initialization."""
         with patch('autogen_kafka_extension.agent.kafka_streaming_agent.SerializationRegistry'), \
-             patch('autogen_kafka_extension.agent.kafka_streaming_agent.AgentEventDeserializer'), \
              patch('autogen_kafka_extension.agent.kafka_streaming_agent.StreamingWorkerBase.__init__'):
             
             agent = KafkaStreamingAgent(

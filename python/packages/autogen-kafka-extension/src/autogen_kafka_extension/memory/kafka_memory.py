@@ -2,7 +2,6 @@ import asyncio
 import logging
 import uuid
 from typing import Any, Optional
-from contextlib import asynccontextmanager
 
 from autogen_core import CancellationToken
 from autogen_core.memory import Memory, UpdateContextResult, MemoryContent, MemoryQueryResult, ListMemory
@@ -10,6 +9,8 @@ from autogen_core.model_context import ChatCompletionContext
 from kstreams import Stream, Send, ConsumerRecord
 
 from autogen_kafka_extension.memory.memory_config import MemoryConfig
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
+from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryService
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
 from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
@@ -73,12 +74,18 @@ class KafkaMemory(Memory, StreamingWorkerBase):
         self._memory = memory or ListMemory()
         self._instance_id = str(uuid.uuid4())
         self._topic_admin: Optional[TopicAdminService] = None
+        self._serializer = EventSerializer(
+            topic=self._memory_topic,
+            serialization_type=MemoryEvent,
+            schema_registry_service=config.get_schema_registry_service()
+        )
 
         # Initialize the streaming worker base with the memory topic
         StreamingWorkerBase.__init__(
             self,
             config=config,
-            topic=self._memory_topic)
+            topic=self._memory_topic,
+            deserialized_type=MemoryEvent)
 
     @property
     def memory_topic(self) -> str:
@@ -330,6 +337,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
             message=event,
             topic=self.memory_topic,
             recipient=self._session_id,
+            serializer=self._serializer
         )
         logger.debug(f"Broadcasted memory event for session {self._session_id}")
 

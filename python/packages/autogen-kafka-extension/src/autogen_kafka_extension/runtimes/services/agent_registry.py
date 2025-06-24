@@ -7,6 +7,7 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent, RegistrationMessageType
 from autogen_kafka_extension.shared.streaming_service import StreamingService
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
@@ -52,9 +53,15 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
                          topic=config.registry_topic,
                          monitoring=monitoring,
                          streaming_service=streaming_service,
-                         serialization_registry=serialization_registry)
+                         serialization_registry=serialization_registry,
+                         deserialized_type=RegistrationEvent)
 
         self._agents: Dict[str, Union[str, AgentType]] = {}
+        self._serializer = EventSerializer(
+            topic=config.registry_topic,
+            serialization_type=RegistrationEvent,
+            schema_registry_service=config.get_schema_registry_service()
+        )
 
     def _extract_agent_key(self, agent: Union[str, AgentType]) -> str:
         """
@@ -171,7 +178,8 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
         await self.send_message(
             topic=self._config.registry_topic,
             message=message,
-            recipient=agent_key
+            recipient=agent_key,
+            serializer=self._serializer
         )
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:

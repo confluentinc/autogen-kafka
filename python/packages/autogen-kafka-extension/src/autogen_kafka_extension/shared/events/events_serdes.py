@@ -2,19 +2,18 @@ import logging
 from typing import Optional, Dict
 
 from aiokafka import ConsumerRecord
-from cloudevents.pydantic import CloudEvent
 
-import json
-
+from azure.core.messaging import CloudEvent
+from confluent_kafka.schema_registry._sync.serde import BaseDeserializer
+from confluent_kafka.serialization import SerializationContext, MessageField
+from kstreams import types, Stream
 from kstreams.middleware import BaseMiddleware
 from kstreams.serializers import Serializer
 
-from autogen_kafka_extension.runtimes.services.constants import EVENT_TYPE_ATTR
-from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
-from autogen_kafka_extension.shared.events.request_event import RequestEvent
-from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent
-from autogen_kafka_extension.shared.events.response_event import ResponseEvent
-from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent
+from autogen_kafka_extension.shared.events.event_base import EventBase
+from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryService
+from autogen_kafka_extension.shared.events.cloudevent_schema import get_cloudevent_json_schema_compact, \
+    cloud_event_to_dict, cloud_event_from_dict
 
 
 class EventDeserializer(BaseMiddleware):
@@ -22,73 +21,114 @@ class EventDeserializer(BaseMiddleware):
     Middleware for deserializing Kafka ConsumerRecord values into Message objects.
     """
 
+    def __init__(
+        self,
+        *,
+        schema_registry_service: SchemaRegistryService,
+        deserialized_type: type,
+        next_call: types.NextMiddlewareCall,
+        send: types.Send,
+        stream: "Stream",
+    ) -> None:
+        super().__init__(next_call = next_call,
+                         send = send,
+                         stream = stream)
+        self._deserialized_type = deserialized_type
+
+        if issubclass(deserialized_type, EventBase):
+            schema_str = deserialized_type.__schema__()
+            from_dict = self._dict_to_event_base
+        elif deserialized_type is CloudEvent:
+            schema_str = get_cloudevent_json_schema_compact()
+            from_dict = self._dict_to_cloud_event
+        else:
+            logging.error(f"Unsupported payload type: {type(deserialized_type)}")
+            raise ValueError(f"Unsupported payload type: {type(deserialized_type)}")
+
+        self._inner_deserializer : BaseDeserializer = schema_registry_service.create_json_deserializer(
+            schema_str=schema_str,
+            from_dict=from_dict
+        )
+
     async def __call__(self, cr: ConsumerRecord):
         # If the record has a value, decode it from bytes and parse as JSON
         if cr.value is not None:
-            # Convert the cr.headers to a dictionary suitable for CloudEvent
-            evt_type : str | None = None
-            headers: Dict[str, str | None] = {}
-            for key, v in cr.headers:
-                if v is None:
-                    headers[key] = None
-
-                v_str = v.decode() if isinstance(v, bytes) else v
-                if key == EVENT_TYPE_ATTR:
-                    evt_type = v_str
-                elif v_str.startswith("str:"):
-                    headers[key] = v_str[4:]
-                elif v_str.startswith("json:"):
-                    try:
-                        headers[key] = json.loads(v_str[5:])
-                    except json.JSONDecodeError as e:
-                        logging.error(f"Failed to decode JSON header {key}: {e}")
-                        raise ValueError(f"Invalid JSON in header {key}: {v_str[6:]}")
-                elif v_str == "None":
-                    headers[key] = None
-                else:
-                    headers[key] = v_str
-
-            if evt_type is None:
-                logging.error(f"missing event type attribute {EVENT_TYPE_ATTR} in headers")
-                raise ValueError(f"Missing required header: {EVENT_TYPE_ATTR}")
-
             try:
-                # Wrap the parsed data in a Message object
-                if evt_type == RequestEvent.__name__:
-                    # If the event type is Message, create a Message instance
-                    values = json.loads(cr.value)
-                    cr.value = RequestEvent.from_dict(values)
-                elif evt_type == RegistrationEvent.__name__:
-                    # If the event type is RegistrationMessage, create a RegistrationMessage instance
-                    values = json.loads(cr.value)
-                    cr.value = RegistrationEvent.from_dict(values)
-                elif evt_type == SubscriptionEvent.__name__:
-                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
-                    values = json.loads(cr.value)
-                    cr.value = SubscriptionEvent.from_dict(values)
-                elif evt_type == ResponseEvent.__name__:
-                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
-                    values = json.loads(cr.value)
-                    cr.value = ResponseEvent.from_dict(values)
-                elif evt_type == MemoryEvent.__name__:
-                    # If the event type is SubscriptionEvt, create a SubscriptionEvt instance
-                    values = json.loads(cr.value)
-                    cr.value = MemoryEvent.from_dict(values)
-                elif evt_type == CloudEvent.__name__:
-                    cr.value = CloudEvent(attributes=headers, data=cr.value)
+                cr.value = self._inner_deserializer(
+                    cr.value,
+                    ctx=SerializationContext(topic=cr.topic, field=MessageField.VALUE)
+                )
+
             except ValueError as e:
-                logging.error(f"Failed to deserialize value {cr.value} with headers {headers}: {e}")
+                logging.error(f"Failed to deserialize value {cr.value}: {e}")
                 raise ValueError(f"Failed to deserialize value: {e}")
 
         # Pass the modified ConsumerRecord to the next middleware or handler
         return await self.next_call(cr)
 
+    def _dict_to_event_base(self, data: Dict, ctx: SerializationContext) -> EventBase:
+        """
+        Convert a dictionary to an EventBase object.
+
+        Args:
+            data: The dictionary to convert.
+            ctx: Serialization context (unused here).
+
+        Returns:
+            EventBase: The converted EventBase object.
+        """
+        return self._deserialized_type.__from_dict__(data)
+
+    def _dict_to_cloud_event(self, data: Dict, ctx: SerializationContext) -> CloudEvent:
+        """
+        Convert a dictionary to an object of the specified type.
+
+        Args:
+            data: The dictionary to convert.
+            ctx: Serialization context (unused here).
+
+        Returns:
+            Any: The converted object.
+        """
+        try:
+            return cloud_event_from_dict(data)
+        except Exception as e:
+            logging.error(f"Failed to deserialize CloudEvent from data {data}: {e}")
+            raise ValueError(f"Failed to deserialize CloudEvent: {e}") from e
+
+def _event_base_to_dict(obj : EventBase, ctx: SerializationContext) -> Dict:
+    return obj.__dict__()
+
+def _cloud_event_to_dict(obj : CloudEvent, ctx: SerializationContext) -> Dict:
+    return cloud_event_to_dict(obj)
 
 class EventSerializer(Serializer):
     """
     Serializer for Message objects and generic payloads.
     Converts Message instances or other payloads to JSON-encoded bytes for Kafka.
     """
+
+    def __init__(self,
+                 topic: str,
+                 serialization_type: type,
+                 schema_registry_service: Optional[SchemaRegistryService] ):
+
+        if issubclass(serialization_type, EventBase):
+            schema_str = serialization_type.__schema__()
+            to_dict = _event_base_to_dict
+        elif serialization_type is CloudEvent:
+            schema_str = get_cloudevent_json_schema_compact()
+            to_dict = _cloud_event_to_dict
+        else:
+            logging.error(f"Unsupported payload type: {type(serialization_type)}")
+            raise ValueError(f"Unsupported payload type: {type(serialization_type)}")
+
+        self._schema_registry_service = schema_registry_service
+        self._topic = topic
+        self._schema_str = schema_str
+        self._inner_serializer = schema_registry_service.create_json_serializer(
+            schema_str=schema_str,
+            to_dict=to_dict)
 
     async def serialize(
         self,
@@ -107,40 +147,11 @@ class EventSerializer(Serializer):
         Returns:
             bytes: The JSON-encoded payload as bytes.
         """
-        if isinstance(payload, CloudEvent):
-            attributes = payload.get_attributes()
-            result = payload.data
-
-            for key, value in attributes.items():
-                if value is None:
-                    headers[key] = "None"
-                elif isinstance(value, str):
-                    headers[key] = "str:" + value
-                elif isinstance(value, dict):
-                    # Convert dict values to JSON strings
-                    headers[key] = 'json:' + json.dumps(value)
-                elif isinstance(value, bytes) and result is None:
-                    result = value
-                else:
-                    logging.warning(f"Non-string header value for {key}: {value}")
-            headers[EVENT_TYPE_ATTR] = CloudEvent.__name__
-
-            return result
-        elif (not isinstance(payload, RequestEvent) and
-              not isinstance(payload, RegistrationEvent) and
-              not isinstance(payload, SubscriptionEvent) and
-              not isinstance(payload, ResponseEvent) and
-              not isinstance(payload, MemoryEvent)):
-            raise RuntimeError(f"Unsupported payload type: {type(payload)}")
-
         try:
-            values = payload.to_dict()
-            headers[EVENT_TYPE_ATTR] = payload.__class__.__name__
-
-            json_value = json.dumps(values)
-        except TypeError as e:
-            logging.error(f"Failed to serialize payload {payload} to JSON: {e}")
-            raise RuntimeError(f"Failed to serialize payload to JSON: {e}")
-
-        # Encode JSON string to bytes for Kafka transport
-        return json_value.encode()
+            return self._inner_serializer(
+                obj=payload,
+                ctx=SerializationContext(topic=self._topic, field=MessageField.VALUE)
+            )
+        except Exception as e:
+            logging.error(f"Failed to serialize payload {payload}: {e}")
+            raise ValueError(f"Failed to serialize payload: {e}") from e

@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 
 from autogen_core import Subscription, TypeSubscription, TypePrefixSubscription
 
+from autogen_kafka_extension.shared.events.event_base import EventBase
+
 
 class SubscriptionEvtOp(Enum):
     ADDED = "added"
@@ -19,7 +21,7 @@ class SubscriptionSerializer(Protocol):
         ...
     
     @staticmethod
-    def to_dict(subscription: Union[Subscription, str]) -> Dict[str, Any]:
+    def __dict__(subscription: Union[Subscription, str]) -> Dict[str, Any]:
         """Convert subscription to dictionary."""
         ...
     
@@ -37,7 +39,7 @@ class TypeSubscriptionSerializer:
         return isinstance(subscription, TypeSubscription)
     
     @staticmethod
-    def to_dict(subscription: TypeSubscription) -> Dict[str, Any]:
+    def __dict__(subscription: TypeSubscription) -> Dict[str, Any]:
         return {
             "type": "TypeSubscription",
             "subscription": {
@@ -65,7 +67,7 @@ class TypePrefixSubscriptionSerializer:
         return isinstance(subscription, TypePrefixSubscription)
     
     @staticmethod
-    def to_dict(subscription: TypePrefixSubscription) -> Dict[str, Any]:
+    def __dict__(subscription: TypePrefixSubscription) -> Dict[str, Any]:
         return {
             "type": "TypePrefixSubscription",
             "subscription": {
@@ -93,7 +95,7 @@ class StringSubscriptionSerializer:
         return isinstance(subscription, str)
     
     @staticmethod
-    def to_dict(subscription: str) -> Dict[str, Any]:
+    def __dict__(subscription: str) -> Dict[str, Any]:
         return {
             "type": "StringSubscription",
             "subscription": subscription
@@ -104,7 +106,7 @@ class StringSubscriptionSerializer:
         return data["subscription"]
 
 
-class SubscriptionEvent:
+class SubscriptionEvent(EventBase):
     """
     SubscriptionEvt represents an event related to a subscription.
     It handles serialization/deserialization of different subscription types
@@ -146,7 +148,7 @@ class SubscriptionEvent:
         """Get the operation."""
         return self._operation
 
-    def to_dict(self) -> Dict[str, Any]:
+    def __dict__(self) -> Dict[str, Any]:
         """
         Convert the SubscriptionEvt to a dictionary representation.
 
@@ -159,14 +161,14 @@ class SubscriptionEvent:
         # Find the appropriate serializer
         for serializer in self._serializers:
             if serializer.can_handle(self._subscription):
-                result = serializer.to_dict(self._subscription)
+                result = serializer.__dict__(self._subscription)
                 result["operation"] = self._operation.value
                 return result
         
         raise ValueError(f"Unsupported subscription type: {type(self._subscription)}")
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'SubscriptionEvent':
+    def __from_dict__(cls, data: Dict[str, Any]) -> 'SubscriptionEvent':
         """
         Create a SubscriptionEvt from a dictionary representation.
 
@@ -198,3 +200,47 @@ class SubscriptionEvent:
             if "is not a valid SubscriptionEvtOp" in str(e):
                 raise ValueError(f"Invalid operation value: {data.get('operation')}")
             raise
+
+    @classmethod
+    def __schema__(cls) -> str:
+        return """
+        {
+            "type": "object",
+            "properties": {
+                "type": {
+                    "type": "string",
+                    "enum": ["TypeSubscription", "TypePrefixSubscription", "StringSubscription"]
+                },
+                "operation": {
+                    "type": "string", 
+                    "enum": ["added", "removed"]
+                },
+                "subscription": {
+                    "oneOf": [
+                        {
+                            "type": "object",
+                            "properties": {
+                                "topic_type": {"type": "string"},
+                                "agent_type": {"type": "string"},
+                                "id": {"type": "string"}
+                            },
+                            "required": ["topic_type", "agent_type", "id"]
+                        },
+                        {
+                            "type": "object", 
+                            "properties": {
+                                "topic_type_prefix": {"type": "string"},
+                                "agent_type": {"type": "string"},
+                                "id": {"type": "string"}
+                            },
+                            "required": ["topic_type_prefix", "agent_type", "id"]
+                        },
+                        {
+                            "type": "string"
+                        }
+                    ]
+                }
+            },
+            "required": ["type", "operation", "subscription"]
+        }
+        """

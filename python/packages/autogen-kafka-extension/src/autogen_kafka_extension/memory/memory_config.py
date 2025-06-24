@@ -1,6 +1,7 @@
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 from autogen_kafka_extension.shared.kafka_config import KafkaConfig
+from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryConfig
 
 
 class MemoryConfig(KafkaConfig):
@@ -13,6 +14,8 @@ class MemoryConfig(KafkaConfig):
                  group_id: str,
                  client_id: str,
                  bootstrap_servers: list[str],
+                 schema_registry_config: SchemaRegistryConfig,
+                 *,
                  replication_factor: int = 1,
                  memory_topic: str = "memory",
                  security_protocol: SecurityProtocol | None = None,
@@ -24,6 +27,7 @@ class MemoryConfig(KafkaConfig):
             group_id=group_id,
             client_id=client_id,
             bootstrap_servers=bootstrap_servers,
+            schema_registry_config=schema_registry_config,
             num_partitions=1,
             replication_factor=replication_factor,
             security_protocol=security_protocol,

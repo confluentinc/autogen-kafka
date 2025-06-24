@@ -13,7 +13,8 @@ dependencies = [
     "autogen-core>=0.6.1",
     "kstreams>=0.26.9",
     "confluent-kafka>=2.10.1",
-    "cloudevents>=1.12.0"
+    "confluent-kafka[avro,json,protobuf]>=2.10.1",
+    "azure-core>=1.34.0"
 ]
 
 [dependency-groups]

@@ -9,7 +9,7 @@ from autogen_core import (
 )
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
-from cloudevents.pydantic import CloudEvent
+from azure.core.messaging import CloudEvent
 from kstreams import Send
 
 from autogen_kafka_extension.runtimes.services import constants
@@ -22,7 +22,6 @@ from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 
 logger = logging.getLogger(__name__)
 
-
 class MessageProcessor:
     """Handles processing of different message types."""
     
@@ -32,7 +31,7 @@ class MessageProcessor:
         serialization_registry: SerializationRegistry,
         subscription_service: SubscriptionService,
         trace_helper: TraceHelper,
-        config: WorkerConfig
+        config: WorkerConfig,
     ):
         """Initialize the MessageProcessor with required dependencies.
         
@@ -48,6 +47,12 @@ class MessageProcessor:
         self._subscription_service = subscription_service
         self._trace_helper = trace_helper
         self._config = config
+
+        self._response_serializer = EventSerializer(
+            topic=config.response_topic,
+            serialization_type=ResponseEvent,
+            schema_registry_service=config.get_schema_registry_service()
+        )
     
     async def process_event(self, event: CloudEvent) -> None:
         """Process an incoming CloudEvent message.
@@ -62,7 +67,7 @@ class MessageProcessor:
         Raises:
             ValueError: If the message content type is unsupported
         """
-        event_attributes = event.get_attributes()
+        event_attributes = event.extensions
         sender: AgentId | None = None
         if (constants.AGENT_SENDER_TYPE_ATTR in event_attributes and
                 event_attributes[constants.AGENT_SENDER_TYPE_ATTR] is not None and
@@ -72,8 +77,8 @@ class MessageProcessor:
                              event_attributes[constants.AGENT_SENDER_KEY_ATTR], )
         topic_id = TopicId(event.type, event.source)
         recipients = await self._subscription_service.get_subscribed_recipients(topic_id)
-        message_content_type = event_attributes[constants.DATA_CONTENT_TYPE_ATTR]
-        message_type = event_attributes[constants.DATA_SCHEMA_ATTR]
+        message_content_type = event.datacontenttype
+        message_type = event.dataschema
 
         if message_content_type == JSON_DATA_CONTENT_TYPE:
             message = self._serialization_registry.deserialize(
@@ -106,20 +111,20 @@ class MessageProcessor:
             with MessageHandlerContext.populate_context(agent.id):
 
                 def stringify_attributes(attributes: Mapping[str, Any]) -> Mapping[str, str | None]:
-                    result: Dict[str, str | None] = {}
+                    attr: Dict[str, str | None] = {}
                     for key, value in attributes.items():
                         if isinstance(value, str):
-                            result[key] = value
+                            attr[key] = value
                         elif value is None:
-                            result[key] = None
+                            attr[key] = None
                         else:
-                            result[key] = str(value)
-                    return result
+                            attr[key] = str(value)
+                    return attr
 
                 async def send_message(agent: Agent, msg_ctx: MessageContext) -> Any:
                     with self._trace_helper.trace_block("process",
                                                         agent.id,
-                                                        parent=stringify_attributes(event.attributes),
+                                                        parent=stringify_attributes(event.extensions),
                                                         extraAttributes={"message_type": message_type}):
                         await agent.on_message(message, ctx=msg_ctx)
 
@@ -185,17 +190,17 @@ class MessageProcessor:
                 ):
                     result = await rec_agent.on_message(message, ctx=message_context)
         except BaseException as e:
-            # Send error response if agent processing fails
-            response_message = RequestEvent(
+            # Send an error response if agent processing fails
+            response_message = ResponseEvent(
                 request_id=request.request_id,
                 error=str(e),
                 metadata=get_telemetry_grpc_metadata()
             )
             await send(
-                topic=self._config.request_topic,
-                value=response_message.to_dict(),
+                topic=self._config.response_topic,
+                value=response_message,
                 key=recipient,
-                serializer=EventSerializer()
+                serializer=self._response_serializer
             )
             return
 
@@ -219,7 +224,7 @@ class MessageProcessor:
                 topic=self._config.response_topic,
                 value=response_message,
                 key=recipient.__str__(),
-                serializer=EventSerializer(),
+                serializer=self._response_serializer,
                 headers={}
             )
         except Exception as e:

@@ -1,52 +1,26 @@
 import logging
 from abc import abstractmethod, ABC
 from typing import Optional, Union, TypeVar, Generic, Any
-from dataclasses import dataclass
 
 from autogen_core import AgentId, TopicId
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper, MessageRuntimeTracingConfig
-from cloudevents.abstract import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
-from kstreams.middleware.middleware import MiddlewareProtocol
 from kstreams.serializers import Serializer
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
-from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent
-from autogen_kafka_extension.shared.events.request_event import RequestEvent
-from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 from autogen_kafka_extension.shared.streaming_service import StreamingService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
-from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
 from autogen_kafka_extension.shared.kafka_config import KafkaConfig
+from autogen_kafka_extension.shared.streaming_service_config import StreamingServiceConfig
 
 logger = logging.getLogger(__name__)
 
-MessageType = Union[RequestEvent, CloudEvent, ResponseEvent, RegistrationEvent, MemoryEvent]
 RecipientType = Union[AgentId, TopicId, str, None]
 
 T = TypeVar("T", bound=KafkaConfig)
-
-@dataclass
-class StreamConfiguration:
-    """Configuration for Kafka stream setup.
-    
-    This dataclass encapsulates all the necessary configuration parameters
-    required to set up a Kafka stream for message processing.
-    
-    Attributes:
-        stream_name (str): Unique identifier for the stream.
-        topics (list[str]): List of Kafka topics to subscribe to.
-        group_id (str): Consumer group ID for Kafka consumer group management.
-        client_id (str): Unique client identifier for the Kafka consumer.
-    """
-    stream_name: str
-    topics: list[str]
-    group_id: str
-    client_id: str
-
 
 class StreamingServiceManager(Generic[T]):
     """Manages streaming service lifecycle and ownership.
@@ -171,8 +145,8 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self,
         config: T,
         topic: str,
+        deserialized_type: type,
         *,
-        deserializer: Optional[MiddlewareProtocol] = None,
         name: Optional[str] = None,
         serialization_registry: Optional[SerializationRegistry] = None,
         monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
@@ -185,6 +159,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 such as Kafka broker information, authentication, and other runtime options.
             topic (str): The primary Kafka topic this worker will subscribe to for
                 incoming messages.
+            deserialized_type (type): The type of messages this worker will process.
             name (Optional[str]): Human-readable name for this worker instance.
                 If None, defaults to the class name.
             serialization_registry (Optional[SerializationRegistry]): Registry for
@@ -195,7 +170,6 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 instance or a TracerProvider. If None, creates a default TraceHelper.
             streaming_service (Optional[StreamingService]): An existing streaming
                 service to use. If None, a new service will be created internally.
-            deserializer (Optional[MiddlewareProtocol]): Optional deserializer for kafka messages.
         """
         self._config = config
         self._topic = topic
@@ -215,7 +189,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             self._trace_helper = monitoring
 
         # Setup stream
-        self._setup_event_stream(deserializer)
+        self._setup_event_stream(deserialized_type=deserialized_type)
 
     @property
     def name(self) -> str:
@@ -285,9 +259,9 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self,
         message: Any | None,
         topic: str,
+        serializer: EventSerializer,
         *,
         recipient: RecipientType = None,
-        serializer: Optional[Serializer] = None
     ) -> None:
         """Send a message to Kafka with improved error handling and type safety.
         
@@ -296,12 +270,12 @@ class StreamingWorkerBase(ABC, Generic[T]):
         and routing.
         
         Args:
-            message (MessageType): The message to send.
+            message (Any | None): The message to send.
             topic (str): The Kafka topic to send the message to.
             recipient (RecipientType, optional): The intended recipient of the
                 message. Can be AgentId, TopicId, string, or None. This is used
                 to generate the message key for partitioning.
-            serializer (Optional[Serializer]): Custom serializer for the message.
+            serializer (Serializer): Custom serializer for the message.
         
         Raises:
             RuntimeError: If the worker is not started or message sending fails.
@@ -315,7 +289,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 value=message,
                 key=key,
                 headers={},
-                serializer=serializer if not serializer is None else EventSerializer()
+                serializer=serializer
             )
             logger.debug(f"Message sent successfully to topic '{topic}' with key '{key}'")
         except Exception as e:
@@ -357,42 +331,28 @@ class StreamingWorkerBase(ABC, Generic[T]):
             return recipient
         return str(recipient)
 
-    def _create_stream_configuration(self) -> StreamConfiguration:
-        """Create a stream configuration with proper naming.
-        
-        Generates a StreamConfiguration object with appropriate naming conventions
-        that include the worker configuration and instance name to ensure uniqueness.
-        
-        Returns:
-            StreamConfiguration: Configuration object for setting up the Kafka stream.
-        """
-        return StreamConfiguration(
-            stream_name=f"{self._config.name}_{self._name}",
-            topics=[self._topic],
-            group_id=f"{self._config.group_id}_{self._name}",
-            client_id=f"{self._config.client_id}_{self._name}"
-        )
-
-    def _setup_event_stream(self, deserializer: Optional[MiddlewareProtocol] = None) -> None:
+    def _setup_event_stream(self, deserialized_type: type,) -> None:
         """Configure the Kafka stream for subscription events.
         
         Internal method that sets up the Kafka stream using the streaming service.
         This includes configuring topics, consumer groups, and message handlers.
         The stream is configured to call `_handle_event` for each incoming message.
         """
-        stream_config = self._create_stream_configuration()
-        
+        stream_config = StreamingServiceConfig(
+            name=f"{self._config.name}_{self._name}",
+            topic=self._topic,
+            group_id=f"{self._config.group_id}_{self._name}",
+            client_id=f"{self._config.client_id}_{self._name}",
+            auto_offset_reset=self._config.auto_offset_reset,
+            deserialized_type=deserialized_type,
+        )
+
         self._service_manager.service.create_and_add_stream(
-            name=stream_config.stream_name,
-            topics=stream_config.topics,
-            group_id=stream_config.group_id,
-            client_id=stream_config.client_id,
+            stream_config=stream_config,
             func=self._handle_event,
-            deserializer=deserializer,
-            auto_offset_reset = self._config.auto_offset_reset
         )
         
-        logger.debug(f"Stream configured for worker '{self._name}' on topics {stream_config.topics}")
+        logger.debug(f"Stream configured for worker '{self._name}' on topic {stream_config.topic}")
 
     @abstractmethod
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:

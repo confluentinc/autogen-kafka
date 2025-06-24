@@ -1,7 +1,6 @@
 import asyncio
 import json
 import logging
-import uuid
 from asyncio import Future
 from typing import Any, Mapping, Dict
 
@@ -10,9 +9,9 @@ from autogen_core._serialization import SerializationRegistry, try_get_known_ser
 from kstreams import ConsumerRecord, Stream, Send
 
 from autogen_kafka_extension.agent.event.agent_event import AgentEvent
-from autogen_kafka_extension.agent.event.agent_event_serdes import AgentEventSerializer, AgentEventDeserializer
 from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
 from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 
 
@@ -47,14 +46,14 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         """
         # Initialize BaseAgent with the provided description
         BaseAgent.__init__(self, description)
-        
+
         # Initialize StreamingWorkerBase with Kafka configuration
         StreamingWorkerBase.__init__(self,
                                      config=config,
                                      topic=config.request_topic,
-                                     deserializer=AgentEventDeserializer())
+                                     deserialized_type=AgentEvent)
         
-        # Initialize message serialization registry for handling different message types
+        # Initialize the message serialization registry for handling different message types
         self._serialization_registry = SerializationRegistry()
         
         # Dictionary to track pending requests awaiting responses
@@ -69,6 +68,13 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         
         # Manager for handling background tasks (e.g., sending messages)
         self._background_task_manager = BackgroundTaskManager()
+
+        # Initialize the serializer
+        self._serializer = EventSerializer(
+            topic=config.request_topic,
+            serialization_type=AgentEvent,
+            schema_registry_service=config.get_schema_registry_service()
+        )
 
     async def on_message_impl(self, message: Any, ctx: MessageContext) -> Any:
         """Handle incoming messages by serializing and sending them via Kafka.
@@ -121,7 +127,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
                                              topic=self._config.request_topic,
                                              message=event,
                                              recipient=ctx.sender.__str__(),
-                                             serializer=AgentEventSerializer())
+                                             serializer=self._serializer)
         )
         
         # Return the future that will be resolved when response is received

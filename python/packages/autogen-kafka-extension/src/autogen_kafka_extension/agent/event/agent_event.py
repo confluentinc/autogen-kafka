@@ -1,8 +1,10 @@
 import base64
 from typing import Dict
 
+from autogen_kafka_extension.shared.events.event_base import EventBase
 
-class AgentEvent:
+
+class AgentEvent(EventBase):
     """
     Base class for agent events.
     This class can be extended to create specific agent events.
@@ -35,7 +37,7 @@ class AgentEvent:
         """
         return self._message
 
-    def to_dict(self) -> Dict[str, str]:
+    def __dict__(self) -> Dict[str, str]:
         """
         Convert the event to a dictionary representation.
         This can be useful for serialization or logging.
@@ -68,6 +70,28 @@ class AgentEvent:
         return cls(id=data["id"],
                    message=message,
                    message_type=data["message_type"])  # Convert back to bytes
+
+    @classmethod
+    def __schema__(cls) -> str:
+        return """
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "message_type": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string",
+                    "contentEncoding": "base64"
+                }
+            },
+            "required": ["id", "message_type", "message"]
+        }
+        """
 
     def __repr__(self):
         return f"AgentEvent(id={self._id}, message_type={self._message_type}, message_length={len(self._message)})"

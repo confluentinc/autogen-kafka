@@ -7,13 +7,13 @@ from autogen_core import (
     AgentRuntime, Agent, AgentId, Subscription, TopicId, CancellationToken,
     AgentType, AgentMetadata, MessageSerializer,
 )
-from cloudevents.pydantic import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.runtimes.messaging_client import MessagingClient
 from autogen_kafka_extension.runtimes.services.agent_registry import AgentRegistry
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
+from autogen_kafka_extension.runtimes.services.cloud_event_processor import CloudEventProcessor
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
@@ -106,7 +106,8 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
         StreamingWorkerBase.__init__(self,
                                      config = config,
                                      topic=config.request_topic,
-                                     monitoring=tracer_provider)
+                                     monitoring=tracer_provider,
+                                     deserialized_type=RequestEvent)
 
         # Kafka components
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,
@@ -129,6 +130,10 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
             self._trace_helper,
             self._config
         )
+
+        # Cloud event processor for handling CloudEvents
+        self._cloud_event_processor : CloudEventProcessor = CloudEventProcessor(config=self._config,
+                                                                                message_processor=self._message_processor)
 
         # Request/response handling
         self._pending_requests: Dict[str, Future[Any]] = {}
@@ -155,6 +160,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
         await self._subscription_svc.start()
         await self._messaging_client.start()
         await self._agent_registry.start()
+        await self._cloud_event_processor.start()
 
         # Start the streaming service
         await super().start()
@@ -182,6 +188,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
         await self._messaging_client.stop()
         await self._agent_registry.stop()
         await self._subscription_svc.stop()
+        await self._cloud_event_processor.stop()
 
         await super().stop()
 
@@ -499,16 +506,9 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
             stream: The Kafka stream instance for stream processing operations.
             send: The send function for producing messages back to Kafka topics.
         """
-        if isinstance(cr.value, RequestEvent):
-            self._background_task_manager.add_task(
-                self._message_processor.process_request(cr.value, send)
-            )
-            return
-
-        if isinstance(cr.value, CloudEvent):
-            # Process as a CloudEvent
-            await self._message_processor.process_event(cr.value)
-            return
+        self._background_task_manager.add_task(
+            self._message_processor.process_request(cr.value, send)
+        )
 
         logger.error(f"Received unknown event type: {cr.value}. Expected 'CloudEvent' or 'Message'.")
 
