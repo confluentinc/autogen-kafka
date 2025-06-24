@@ -51,7 +51,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         StreamingWorkerBase.__init__(self,
                                      config=config,
                                      topic=config.request_topic,
-                                     deserialized_type=AgentEvent)
+                                     target_type=AgentEvent)
         
         # Initialize the message serialization registry for handling different message types
         self._serialization_registry = SerializationRegistry()
@@ -72,7 +72,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         # Initialize the serializer
         self._serializer = EventSerializer(
             topic=config.request_topic,
-            serialization_type=AgentEvent,
+            source_type=AgentEvent,
             schema_registry_service=config.get_schema_registry_service()
         )
 

@@ -54,12 +54,12 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
                          monitoring=monitoring,
                          streaming_service=streaming_service,
                          serialization_registry=serialization_registry,
-                         deserialized_type=RegistrationEvent)
+                         target_type=RegistrationEvent)
 
         self._agents: Dict[str, Union[str, AgentType]] = {}
         self._serializer = EventSerializer(
             topic=config.registry_topic,
-            serialization_type=RegistrationEvent,
+            source_type=RegistrationEvent,
             schema_registry_service=config.get_schema_registry_service()
         )
 

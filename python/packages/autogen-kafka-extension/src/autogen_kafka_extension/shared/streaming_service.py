@@ -86,7 +86,7 @@ class StreamingService(StreamEngine):
         middleware_type = middleware.Middleware(
             middleware = EventDeserializer,
             schema_registry_service=self._config.get_schema_registry_service(),
-            deserialized_type= stream_config.deserialized_type)
+            target_type= stream_config.target_type)
 
         stream = Stream(
             topics=stream_config.topic,

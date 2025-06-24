@@ -15,7 +15,7 @@ class CloudEventProcessor(StreamingWorkerBase[WorkerConfig]):
                  config: WorkerConfig,
                  message_processor: MessageProcessor):
         super().__init__(config=config,
-                         deserialized_type=CloudEvent,
+                         target_type=CloudEvent,
                          topic=config.publish_topic)
         self._message_processor = message_processor
 

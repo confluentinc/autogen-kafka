@@ -88,12 +88,12 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
                          monitoring=monitoring,
                          streaming_service=streaming_service,
                          serialization_registry=serialization_registry,
-                         deserialized_type=SubscriptionEvent)
+                         target_type=SubscriptionEvent)
         self._local_subscriptions = SubscriptionManager()
         self._global_subscriptions = SubscriptionManager()
         self._subscription_serializer = EventSerializer(
             topic=config.subscription_topic,
-            serialization_type=SubscriptionEvent,
+            source_type=SubscriptionEvent,
             schema_registry_service=config.get_schema_registry_service()
         )
 

@@ -50,7 +50,7 @@ class MessageProcessor:
 
         self._response_serializer = EventSerializer(
             topic=config.response_topic,
-            serialization_type=ResponseEvent,
+            source_type=ResponseEvent,
             schema_registry_service=config.get_schema_registry_service()
         )
     

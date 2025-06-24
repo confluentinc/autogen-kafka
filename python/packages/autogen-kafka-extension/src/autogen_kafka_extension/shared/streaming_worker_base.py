@@ -145,7 +145,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self,
         config: T,
         topic: str,
-        deserialized_type: type,
+        target_type: type,
         *,
         name: Optional[str] = None,
         serialization_registry: Optional[SerializationRegistry] = None,
@@ -159,7 +159,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 such as Kafka broker information, authentication, and other runtime options.
             topic (str): The primary Kafka topic this worker will subscribe to for
                 incoming messages.
-            deserialized_type (type): The type of messages this worker will process.
+            target_type (type): The type of messages this worker will process.
             name (Optional[str]): Human-readable name for this worker instance.
                 If None, defaults to the class name.
             serialization_registry (Optional[SerializationRegistry]): Registry for
@@ -189,7 +189,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             self._trace_helper = monitoring
 
         # Setup stream
-        self._setup_event_stream(deserialized_type=deserialized_type)
+        self._setup_event_stream(target_type=target_type)
 
     @property
     def name(self) -> str:
@@ -331,7 +331,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             return recipient
         return str(recipient)
 
-    def _setup_event_stream(self, deserialized_type: type,) -> None:
+    def _setup_event_stream(self, target_type: type,) -> None:
         """Configure the Kafka stream for subscription events.
         
         Internal method that sets up the Kafka stream using the streaming service.
@@ -344,7 +344,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             group_id=f"{self._config.group_id}_{self._name}",
             client_id=f"{self._config.client_id}_{self._name}",
             auto_offset_reset=self._config.auto_offset_reset,
-            deserialized_type=deserialized_type,
+            target_type=target_type,
         )
 
         self._service_manager.service.create_and_add_stream(

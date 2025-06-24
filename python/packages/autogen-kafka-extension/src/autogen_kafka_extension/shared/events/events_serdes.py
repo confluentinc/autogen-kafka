@@ -25,7 +25,7 @@ class EventDeserializer(BaseMiddleware):
         self,
         *,
         schema_registry_service: SchemaRegistryService,
-        deserialized_type: type,
+        target_type: type,
         next_call: types.NextMiddlewareCall,
         send: types.Send,
         stream: "Stream",
@@ -33,17 +33,17 @@ class EventDeserializer(BaseMiddleware):
         super().__init__(next_call = next_call,
                          send = send,
                          stream = stream)
-        self._deserialized_type = deserialized_type
+        self._target_type = target_type
 
-        if issubclass(deserialized_type, EventBase):
-            schema_str = deserialized_type.__schema__()
+        if issubclass(target_type, EventBase):
+            schema_str = target_type.__schema__()
             from_dict = self._dict_to_event_base
-        elif deserialized_type is CloudEvent:
+        elif target_type is CloudEvent:
             schema_str = get_cloudevent_json_schema_compact()
             from_dict = self._dict_to_cloud_event
         else:
-            logging.error(f"Unsupported payload type: {type(deserialized_type)}")
-            raise ValueError(f"Unsupported payload type: {type(deserialized_type)}")
+            logging.error(f"Unsupported payload type: {type(target_type)}")
+            raise ValueError(f"Unsupported payload type: {type(target_type)}")
 
         self._inner_deserializer : BaseDeserializer = schema_registry_service.create_json_deserializer(
             schema_str=schema_str,
@@ -77,7 +77,7 @@ class EventDeserializer(BaseMiddleware):
         Returns:
             EventBase: The converted EventBase object.
         """
-        return self._deserialized_type.__from_dict__(data)
+        return self._target_type.__from_dict__(data)
 
     def _dict_to_cloud_event(self, data: Dict, ctx: SerializationContext) -> CloudEvent:
         """
@@ -110,18 +110,18 @@ class EventSerializer(Serializer):
 
     def __init__(self,
                  topic: str,
-                 serialization_type: type,
+                 source_type: type,
                  schema_registry_service: Optional[SchemaRegistryService] ):
 
-        if issubclass(serialization_type, EventBase):
-            schema_str = serialization_type.__schema__()
+        if issubclass(source_type, EventBase):
+            schema_str = source_type.__schema__()
             to_dict = _event_base_to_dict
-        elif serialization_type is CloudEvent:
+        elif source_type is CloudEvent:
             schema_str = get_cloudevent_json_schema_compact()
             to_dict = _cloud_event_to_dict
         else:
-            logging.error(f"Unsupported payload type: {type(serialization_type)}")
-            raise ValueError(f"Unsupported payload type: {type(serialization_type)}")
+            logging.error(f"Unsupported payload type: {type(source_type)}")
+            raise ValueError(f"Unsupported payload type: {type(source_type)}")
 
         self._schema_registry_service = schema_registry_service
         self._topic = topic

@@ -85,18 +85,18 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
                          monitoring=monitoring,
                          streaming_service=streaming_service,
                          serialization_registry=serialization_registry,
-                         deserialized_type=ResponseEvent)
+                         target_type=ResponseEvent)
         # Request/response handling
         self._pending_requests: Dict[str, Future[Any]] = {}
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
         self._cloud_event_serializer = EventSerializer(
             topic = config.publish_topic,
-            serialization_type = CloudEvent,
+            source_type = CloudEvent,
             schema_registry_service = config.get_schema_registry_service())
         self._request_serializer = EventSerializer(
             topic = config.request_topic,
-            serialization_type = RequestEvent,
+            source_type = RequestEvent,
             schema_registry_service = config.get_schema_registry_service()
         )
 

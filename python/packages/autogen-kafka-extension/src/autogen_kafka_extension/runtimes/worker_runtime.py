@@ -107,7 +107,7 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[WorkerConfig], AgentRuntime):
                                      config = config,
                                      topic=config.request_topic,
                                      monitoring=tracer_provider,
-                                     deserialized_type=RequestEvent)
+                                     target_type=RequestEvent)
 
         # Kafka components
         self._agent_registry : AgentRegistry = AgentRegistry(config=config,

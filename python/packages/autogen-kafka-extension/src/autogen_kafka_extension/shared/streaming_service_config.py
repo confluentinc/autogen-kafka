@@ -8,7 +8,7 @@ class StreamingServiceConfig:
     topic: str
     group_id: str
     client_id: str
-    deserialized_type: type
+    target_type: type
     auto_offset_reset: str = "latest"
     enable_auto_commit: bool = True
     auto_create_topics: bool = True

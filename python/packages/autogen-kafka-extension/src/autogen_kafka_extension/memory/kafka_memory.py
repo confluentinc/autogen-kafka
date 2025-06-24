@@ -76,7 +76,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
         self._topic_admin: Optional[TopicAdminService] = None
         self._serializer = EventSerializer(
             topic=self._memory_topic,
-            serialization_type=MemoryEvent,
+            source_type=MemoryEvent,
             schema_registry_service=config.get_schema_registry_service()
         )
 
@@ -85,7 +85,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
             self,
             config=config,
             topic=self._memory_topic,
-            deserialized_type=MemoryEvent)
+            target_type=MemoryEvent)
 
     @property
     def memory_topic(self) -> str:
