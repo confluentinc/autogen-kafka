@@ -5,7 +5,7 @@ from confluent_kafka import KafkaException, KafkaError
 from confluent_kafka.admin import ClusterMetadata
 from confluent_kafka.cimpl import NewTopic
 
-from autogen_kafka_extension.shared.kafka_config import KafkaConfig
+from autogen_kafka_extension.config import KafkaConfig
 
 logger = logging.getLogger(__name__)
 

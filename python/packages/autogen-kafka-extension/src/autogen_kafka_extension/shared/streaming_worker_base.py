@@ -12,9 +12,8 @@ from opentelemetry.trace import TracerProvider
 from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.streaming_service import StreamingService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
-from autogen_kafka_extension.shared.kafka_config import KafkaConfig
-from autogen_kafka_extension.shared.streaming_service_config import StreamingServiceConfig
+# WorkerConfig is now available from the config package
+from autogen_kafka_extension.config import KafkaConfig, StreamingServiceConfig
 
 logger = logging.getLogger(__name__)
 

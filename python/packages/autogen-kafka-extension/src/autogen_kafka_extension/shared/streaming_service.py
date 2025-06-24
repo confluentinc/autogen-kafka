@@ -2,10 +2,8 @@ from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consum
 from kstreams.types import StreamFunc
 
 from autogen_kafka_extension.shared.events.events_serdes import EventDeserializer
-from autogen_kafka_extension.shared.kafka_config import KafkaConfig
-from autogen_kafka_extension.shared.streaming_service_config import StreamingServiceConfig
+from autogen_kafka_extension.config import KafkaConfig, StreamingServiceConfig
 from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 
 class StreamingService(StreamEngine):

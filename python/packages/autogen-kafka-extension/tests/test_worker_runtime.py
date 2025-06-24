@@ -13,8 +13,8 @@ from testcontainers.kafka import KafkaContainer
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
-from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryConfig
-from utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
+from autogen_kafka_extension.config import SchemaRegistryConfig
+from .utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
     LoopbackAgentWithDefaultSubscription
 
 
