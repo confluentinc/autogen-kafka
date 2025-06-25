@@ -1,9 +1,10 @@
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
 from kstreams.types import StreamFunc
 
-from autogen_kafka_extension.shared.events.events_serdes import EventDeserializer
-from autogen_kafka_extension.config import KafkaConfig, StreamingServiceConfig
-from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
+from ..config.kafka_config import KafkaConfig
+from .events.events_serdes import EventDeserializer
+from ..config.streaming_config import StreamingServiceConfig
+from .topic_admin_service import TopicAdminService
 
 
 class StreamingService(StreamEngine):
@@ -39,7 +40,7 @@ class StreamingService(StreamEngine):
         service for managing Kafka topics.
         
         Args:
-            config (WorkerConfig): Configuration object containing Kafka connection
+            config (KafkaConfig): Configuration object containing Kafka connection
                                  details, serialization settings, and other service
                                  configuration parameters
         """

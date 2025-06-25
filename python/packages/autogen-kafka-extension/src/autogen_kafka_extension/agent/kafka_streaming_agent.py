@@ -8,11 +8,11 @@ from autogen_core import MessageContext, BaseAgent, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, try_get_known_serializers_for_type
 from kstreams import ConsumerRecord, Stream, Send
 
-from autogen_kafka_extension.agent.event.agent_event import AgentEvent
-from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
-from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
-from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
-from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
+from ..config.agent_config import KafkaAgentConfig
+from .event.agent_event import AgentEvent
+from ..shared.background_task_manager import BackgroundTaskManager
+from ..shared.events.events_serdes import EventSerializer
+from ..shared.streaming_worker_base import StreamingWorkerBase
 
 
 class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
@@ -73,7 +73,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         self._serializer = EventSerializer(
             topic=config.request_topic,
             source_type=AgentEvent,
-            schema_registry_service=config.get_schema_registry_service()
+            schema_registry_service=config.kafka_config.get_schema_registry_service()
         )
 
     async def on_message_impl(self, message: Any, ctx: MessageContext) -> Any:

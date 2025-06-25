@@ -11,17 +11,17 @@ from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
+from autogen_kafka_extension import KafkaWorkerConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.shared.streaming_service import StreamingService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
-class MessagingClient(StreamingWorkerBase[WorkerConfig]):
+class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
     """A Kafka-based messaging client for asynchronous agent communication.
     
     The MessagingClient provides a high-level interface for sending and receiving messages
@@ -67,7 +67,7 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
     """
 
     def __init__(self,
-                 config: WorkerConfig,
+                 config: KafkaWorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry(),
@@ -93,11 +93,11 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
         self._cloud_event_serializer = EventSerializer(
             topic = config.publish_topic,
             source_type = CloudEvent,
-            schema_registry_service = config.get_schema_registry_service())
+            schema_registry_service = self._kafka_config.get_schema_registry_service())
         self._request_serializer = EventSerializer(
             topic = config.request_topic,
             source_type = RequestEvent,
-            schema_registry_service = config.get_schema_registry_service()
+            schema_registry_service = self._kafka_config.get_schema_registry_service()
         )
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:

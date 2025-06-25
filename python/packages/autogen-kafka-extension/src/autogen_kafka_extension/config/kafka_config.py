@@ -11,11 +11,11 @@ from confluent_kafka.admin import AdminClient
 from kstreams.backends import Kafka
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
-from .base_config import KafkaBaseConfig
-from .schema_registry import SchemaRegistryService, SchemaRegistryConfig
+from .schema_registry_config import SchemaRegistryConfig
+from .schema_registry_service import SchemaRegistryService
+from .base_config import BaseConfig
 
-
-class KafkaConfig(KafkaBaseConfig):
+class KafkaConfig(BaseConfig):
     """Core Kafka configuration with schema registry and administrative capabilities.
     
     This class provides a comprehensive Kafka configuration that includes:
@@ -63,26 +63,37 @@ class KafkaConfig(KafkaBaseConfig):
         Raises:
             ValueError: If required parameters are missing or invalid.
         """
-        super().__init__(
-            name=name,
-            group_id=group_id,
-            client_id=client_id,
-            bootstrap_servers=bootstrap_servers,
-            security_protocol=security_protocol,
-            security_mechanism=security_mechanism,
-            sasl_plain_username=sasl_plain_username,
-            sasl_plain_password=sasl_plain_password,
-        )
-        
+        super().__init__()
+
+        if not name or not name.strip():
+            raise ValueError("Configuration name cannot be empty")
+
+        self._name = name.strip()
+        self._group_id = group_id
+        self._client_id = client_id
+        self._bootstrap_servers = bootstrap_servers
+        self._security_protocol = security_protocol
+        self._security_mechanism = security_mechanism
+        self._sasl_plain_username = sasl_plain_username
+        self._sasl_plain_password = sasl_plain_password
         self._schema_registry_config = schema_registry_config
         self._num_partitions = num_partitions
         self._replication_factor = replication_factor
         self._is_compacted = is_compacted
         self._auto_offset_reset = auto_offset_reset
-        
+
         # Lazy initialization for services
         self._schema_registry_service: Optional[SchemaRegistryService] = None
-    
+
+    @property
+    def name(self) -> str:
+        """Get the configuration name.
+
+        Returns:
+            The descriptive name of this configuration.
+        """
+        return self._name
+
     @property
     def schema_registry_config(self) -> SchemaRegistryConfig:
         """Get the schema registry configuration."""
@@ -107,6 +118,41 @@ class KafkaConfig(KafkaBaseConfig):
     def auto_offset_reset(self) -> str:
         """Get the auto offset reset policy."""
         return self._auto_offset_reset
+
+    @property
+    def group_id(self) -> str:
+        """Get the Kafka consumer group ID."""
+        return self._group_id
+
+    @property
+    def client_id(self) -> str:
+        """Get the Kafka client ID."""
+        return self._client_id
+
+    @property
+    def bootstrap_servers(self) -> list[str]:
+        """Get the list of Kafka bootstrap servers."""
+        return self._bootstrap_servers.copy()
+
+    @property
+    def security_protocol(self) -> Optional[SecurityProtocol]:
+        """Get the security protocol."""
+        return self._security_protocol
+
+    @property
+    def security_mechanism(self) -> Optional[SaslMechanism]:
+        """Get the SASL mechanism."""
+        return self._security_mechanism
+
+    @property
+    def sasl_plain_username(self) -> Optional[str]:
+        """Get the SASL username."""
+        return self._sasl_plain_username
+
+    @property
+    def sasl_plain_password(self) -> Optional[str]:
+        """Get the SASL password."""
+        return self._sasl_plain_password
     
     def get_kafka_backend(self) -> Kafka:
         """Create and configure a Kafka backend instance for streaming operations.
@@ -129,7 +175,7 @@ class KafkaConfig(KafkaBaseConfig):
             sasl_plain_password=self._sasl_plain_password,
             ssl_context=create_ssl_context(),
         )
-    
+
     def get_schema_registry_service(self) -> SchemaRegistryService:
         """Get the schema registry service instance.
         
@@ -192,9 +238,30 @@ class KafkaConfig(KafkaBaseConfig):
         Raises:
             ValueError: If any configuration parameters are invalid.
         """
-        # Call parent validation
-        super().validate()
-        
+        if not self._group_id or not self._group_id.strip():
+            raise ValueError("group_id cannot be empty")
+
+        if not self._client_id or not self._client_id.strip():
+            raise ValueError("client_id cannot be empty")
+
+        if not self._bootstrap_servers:
+            raise ValueError("bootstrap_servers cannot be empty")
+
+        # Validate bootstrap server format
+        for server in self._bootstrap_servers:
+            if not server or ':' not in server:
+                raise ValueError(f"Invalid bootstrap server format: {server}")
+
+        # Validate SASL authentication requirements
+        if self._security_protocol and self._security_protocol != SecurityProtocol.PLAINTEXT:
+            if self._security_mechanism == SaslMechanism.PLAIN:
+                if not self._sasl_plain_username or not self._sasl_plain_password:
+                    raise ValueError(
+                        "SASL PLAIN authentication requires both username and password"
+                    )
+
+        self._validated = True
+
         # Validate topic settings
         if self._num_partitions < 1:
             raise ValueError("num_partitions must be at least 1")

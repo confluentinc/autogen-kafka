@@ -3,15 +3,11 @@
 This module provides configuration classes specifically for Kafka worker runtimes,
 including all the topics needed for distributed agent coordination and messaging.
 """
-
-from typing import Optional
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
-
+from .service_base_config import ServiceBaseConfig
 from .kafka_config import KafkaConfig
-from .schema_registry import SchemaRegistryConfig
 
 
-class KafkaWorkerConfig(KafkaConfig):
+class KafkaWorkerConfig(ServiceBaseConfig):
     """Configuration for Kafka worker runtimes.
     
     This class extends the base KafkaConfig with worker-specific settings
@@ -24,63 +20,29 @@ class KafkaWorkerConfig(KafkaConfig):
     
     def __init__(
         self,
-        name: str,
-        group_id: str,
-        client_id: str,
-        bootstrap_servers: list[str],
-        schema_registry_config: SchemaRegistryConfig,
+            kafka_config: KafkaConfig,
         *,
         request_topic: str = "worker_requests",
         response_topic: str = "worker_responses", 
         registry_topic: str = "agent_registry",
         subscription_topic: str = "agent_subscriptions",
         publish_topic: str = "agent_publishes",
-        num_partitions: int = 3,
-        replication_factor: int = 1,
-        security_protocol: Optional[SecurityProtocol] = None,
-        security_mechanism: Optional[SaslMechanism] = None,
-        sasl_plain_username: Optional[str] = None,
-        sasl_plain_password: Optional[str] = None,
     ) -> None:
         """Initialize the Kafka worker configuration.
         
         Args:
-            name: A descriptive name for this worker configuration.
-            group_id: The Kafka consumer group ID for coordinating message consumption.
-            client_id: A unique identifier for this Kafka client instance.
-            bootstrap_servers: List of Kafka broker addresses in 'host:port' format.
-            schema_registry_config: Configuration for the schema registry service.
+            kafka_config: The base Kafka configuration to inherit from.
             request_topic: The Kafka topic name for consuming incoming requests.
             response_topic: The Kafka topic name for publishing response messages.
             registry_topic: The Kafka topic name for agent registry operations.
             subscription_topic: The Kafka topic name for publishing subscription messages.
             publish_topic: The Kafka topic name for publishing messages.
-            num_partitions: Number of partitions for topics. Defaults to 3.
-            replication_factor: Replication factor for topics. Defaults to 1.
-            security_protocol: Security protocol for Kafka connection.
-            security_mechanism: SASL mechanism for authentication.
-            sasl_plain_username: Username for SASL PLAIN authentication.
-            sasl_plain_password: Password for SASL PLAIN authentication.
-            
+
         Raises:
             ValueError: If required parameters are missing or invalid.
         """
-        super().__init__(
-            name=name,
-            group_id=group_id,
-            client_id=client_id,
-            bootstrap_servers=bootstrap_servers,
-            schema_registry_config=schema_registry_config,
-            num_partitions=num_partitions,
-            replication_factor=replication_factor,
-            is_compacted=False,  # Workers typically don't need compacted topics
-            auto_offset_reset='latest',  # Start from latest for new messages
-            security_protocol=security_protocol,
-            security_mechanism=security_mechanism,
-            sasl_plain_username=sasl_plain_username,
-            sasl_plain_password=sasl_plain_password,
-        )
-        
+        super().__init__(kafka_config=kafka_config)
+
         self._request_topic = request_topic
         self._response_topic = response_topic
         self._registry_topic = registry_topic

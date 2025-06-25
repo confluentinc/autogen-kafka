@@ -8,12 +8,11 @@ from autogen_core.memory import Memory, UpdateContextResult, MemoryContent, Memo
 from autogen_core.model_context import ChatCompletionContext
 from kstreams import Stream, Send, ConsumerRecord
 
-from autogen_kafka_extension.memory.memory_config import MemoryConfig
-from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
-from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryService
-from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.shared.events.memory_event import MemoryEvent
-from autogen_kafka_extension.shared.topic_admin_service import TopicAdminService
+from ..config.memory_config import KafkaMemoryConfig
+from ..shared.events.events_serdes import EventSerializer
+from ..shared.streaming_worker_base import StreamingWorkerBase
+from ..shared.events.memory_event import MemoryEvent
+from ..shared.topic_admin_service import TopicAdminService
 
 logger = logging.getLogger(__name__)
 
@@ -33,7 +32,7 @@ class TopicDeletionTimeoutError(KafkaMemoryError):
     pass
 
 
-class KafkaMemory(Memory, StreamingWorkerBase):
+class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
     """
     A distributed memory implementation that uses Apache Kafka for persistence and synchronization.
     
@@ -53,7 +52,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
     """
 
     def __init__(self,
-                 config: MemoryConfig,
+                 config: KafkaMemoryConfig,
                  session_id: str,
                  *,
                  memory: Optional[Memory] = None) -> None:
@@ -77,7 +76,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
         self._serializer = EventSerializer(
             topic=self._memory_topic,
             source_type=MemoryEvent,
-            schema_registry_service=config.get_schema_registry_service()
+            schema_registry_service=config.kafka_config.get_schema_registry_service()
         )
 
         # Initialize the streaming worker base with the memory topic
@@ -300,7 +299,7 @@ class KafkaMemory(Memory, StreamingWorkerBase):
             TopicAdminService: The topic admin service for managing topics.
         """
         if self._topic_admin is None:
-            self._topic_admin = TopicAdminService(config=self._config)
+            self._topic_admin = TopicAdminService(config=self._kafka_config)
         return self._topic_admin
 
     async def _ensure_started(self) -> None:

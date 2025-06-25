@@ -12,10 +12,10 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
 from kstreams import Send
 
+from autogen_kafka_extension import KafkaWorkerConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.events.response_event import ResponseEvent
@@ -31,7 +31,7 @@ class MessageProcessor:
         serialization_registry: SerializationRegistry,
         subscription_service: SubscriptionService,
         trace_helper: TraceHelper,
-        config: WorkerConfig,
+        config: KafkaWorkerConfig,
     ):
         """Initialize the MessageProcessor with required dependencies.
         
@@ -51,7 +51,7 @@ class MessageProcessor:
         self._response_serializer = EventSerializer(
             topic=config.response_topic,
             source_type=ResponseEvent,
-            schema_registry_service=config.get_schema_registry_service()
+            schema_registry_service=config.kafka_config.get_schema_registry_service()
         )
     
     async def process_event(self, event: CloudEvent) -> None:

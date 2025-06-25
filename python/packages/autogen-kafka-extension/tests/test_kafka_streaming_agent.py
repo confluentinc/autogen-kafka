@@ -6,8 +6,8 @@ from unittest.mock import Mock, AsyncMock, patch
 from autogen_core import MessageContext, JSON_DATA_CONTENT_TYPE
 from kstreams import ConsumerRecord, Stream, Send
 
+from autogen_kafka_extension import KafkaAgentConfig
 from autogen_kafka_extension.agent.kafka_streaming_agent import KafkaStreamingAgent
-from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
 from autogen_kafka_extension.agent.event.agent_event import AgentEvent
 
 

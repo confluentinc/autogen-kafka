@@ -5,20 +5,24 @@ all configuration classes and provides clean public APIs.
 """
 
 from .base_config import BaseConfig
-from .schema_registry import SchemaRegistryConfig, SchemaRegistryService
-from .kafka_config import KafkaConfig
 from .agent_config import KafkaAgentConfig
+from .kafka_config import KafkaConfig
 from .memory_config import KafkaMemoryConfig
+from .schema_registry_config import SchemaRegistryConfig
+from .service_base_config import ServiceBaseConfig
 from .worker_config import KafkaWorkerConfig
 from .streaming_config import StreamingServiceConfig
+from .schema_registry_service import SchemaRegistryService
 
 __all__ = [
+    "ServiceBaseConfig",
     "BaseConfig",
     "SchemaRegistryConfig",
-    "SchemaRegistryService",
-    "KafkaConfig", 
     "KafkaAgentConfig",
-    "KafkaMemoryConfig", 
+    "KafkaMemoryConfig",
     "KafkaWorkerConfig",
     "StreamingServiceConfig",
-] 
+    "KafkaConfig",
+    "SchemaRegistryService",
+]
+

@@ -9,14 +9,15 @@ This package provides Kafka-based extensions for AutoGen agents, including:
 
 # Configuration classes (import first to avoid circular dependencies)
 from .config import (
-    BaseConfig,
     SchemaRegistryConfig,
-    SchemaRegistryService,
-    KafkaConfig,
     KafkaAgentConfig,
     KafkaMemoryConfig,
     KafkaWorkerConfig,
     StreamingServiceConfig,
+    SchemaRegistryService,
+    BaseConfig,
+    KafkaConfig,
+    ServiceBaseConfig,
 )
 
 # Essential shared utilities
@@ -31,6 +32,7 @@ from .shared import (
 from .agent import KafkaStreamingAgent
 from .memory import KafkaMemory, KafkaMemoryError, TopicDeletionTimeoutError
 from .runtimes import KafkaWorkerAgentRuntime, MessagingClient
+from .runtimes.services import SubscriptionService
 
 __version__ = "0.1.0"
 
@@ -42,20 +44,22 @@ __all__ = [
     "TopicDeletionTimeoutError",
     "KafkaWorkerAgentRuntime",
     "MessagingClient",
-    
+    "SubscriptionService",
+
     # Configuration classes
-    "BaseConfig",
     "SchemaRegistryConfig",
-    "SchemaRegistryService",
-    "KafkaConfig",
     "KafkaAgentConfig",
-    "KafkaMemoryConfig", 
+    "KafkaMemoryConfig",
     "KafkaWorkerConfig",
     "StreamingServiceConfig",
-    
+    "ServiceBaseConfig",
+    "BaseConfig",
+    "KafkaConfig",
+
     # Shared utilities
     "StreamingService",
     "StreamingWorkerBase",
     "TopicAdminService",
     "BackgroundTaskManager",
+    "SchemaRegistryService",
 ]

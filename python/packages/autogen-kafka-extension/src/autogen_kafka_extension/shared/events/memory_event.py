@@ -5,7 +5,7 @@ from typing import Dict
 from autogen_core import Image
 from autogen_core.memory import MemoryContent, MemoryMimeType
 
-from autogen_kafka_extension.shared.events.event_base import EventBase
+from .event_base import EventBase
 
 
 class MemoryEvent(EventBase):

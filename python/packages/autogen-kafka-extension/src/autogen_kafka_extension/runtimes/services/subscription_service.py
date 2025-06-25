@@ -8,16 +8,16 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
+from autogen_kafka_extension import KafkaWorkerConfig
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.streaming_service import StreamingService
 from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 
 logger = logging.getLogger(__name__)
 
 
-class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
+class SubscriptionService(StreamingWorkerBase[KafkaWorkerConfig]):
     """
     Service for managing agent subscriptions with distributed coordination via Kafka.
     
@@ -67,7 +67,7 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
         return self._global_subscriptions
 
     def __init__(self,
-                 config: WorkerConfig,
+                 config: KafkaWorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
@@ -75,7 +75,7 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
         Initialize the SubscriptionService.
         
         Args:
-            config (WorkerConfig): Configuration for the worker including subscription topic settings
+            config (KafkaWorkerConfig): Configuration for the worker including subscription topic settings
             streaming_service (Optional[StreamingService], optional): Service for Kafka streaming operations.
                 If None, a default service will be created. Defaults to None.
             monitoring (Optional[TraceHelper] | Optional[TracerProvider], optional): Monitoring and tracing
@@ -94,7 +94,7 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
         self._subscription_serializer = EventSerializer(
             topic=config.subscription_topic,
             source_type=SubscriptionEvent,
-            schema_registry_service=config.get_schema_registry_service()
+            schema_registry_service=self._kafka_config.get_schema_registry_service()
         )
 
     async def get_local_recipients(self, topic_id: TopicId) -> List[AgentId]:

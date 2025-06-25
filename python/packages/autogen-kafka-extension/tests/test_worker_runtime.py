@@ -10,10 +10,10 @@ from testcontainers.core.network import Network
 from testcontainers.core.waiting_utils import wait_for_logs
 from testcontainers.kafka import KafkaContainer
 
-from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
-from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
-from autogen_kafka_extension.config import SchemaRegistryConfig
+from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import SubscriptionService
+from autogen_kafka_extension import KafkaWorkerAgentRuntime
+from autogen_kafka_extension import SchemaRegistryConfig, KafkaConfig
 from .utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
     LoopbackAgentWithDefaultSubscription
 
@@ -80,24 +80,26 @@ def create_worker_config(
     group_suffix: str, 
     client_suffix: str,
     name: str = WORKER_TITLE
-) -> WorkerConfig:
+) -> KafkaWorkerConfig:
 
     """Helper function to create a WorkerConfig with standard settings."""
-    return WorkerConfig(
-        name=name + f"_{group_suffix}_{client_suffix}",
+    return KafkaWorkerConfig(
+        kafka_config=KafkaConfig(
+            name=name + f"_{group_suffix}_{client_suffix}",
+            security_protocol=SecurityProtocol.PLAINTEXT,
+            security_mechanism=SaslMechanism.PLAIN,
+            bootstrap_servers=[connection],
+            group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
+            client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
+            schema_registry_config=SchemaRegistryConfig(
+                url=sr_host,
+            )
+        ),
         request_topic=TOPIC_NAMES["request"],
         subscription_topic=TOPIC_NAMES["subscription"],
         publish_topic=TOPIC_NAMES["publish"],
         registry_topic=TOPIC_NAMES["registry"],
         response_topic=TOPIC_NAMES["response"],
-        security_protocol=SecurityProtocol.PLAINTEXT,
-        security_mechanism=SaslMechanism.PLAIN,
-        bootstrap_servers=[connection],
-        group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
-        client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
-        schema_registry_config=SchemaRegistryConfig(
-            url=sr_host,
-        )
     )
 
 

@@ -7,16 +7,16 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
-from autogen_kafka_extension.shared.events.registration_event import RegistrationEvent, RegistrationMessageType
-from autogen_kafka_extension.shared.streaming_service import StreamingService
-from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from ...config.worker_config import KafkaWorkerConfig
+from ...shared.events.events_serdes import EventSerializer
+from ...shared.events.registration_event import RegistrationEvent, RegistrationMessageType
+from ...shared.streaming_service import StreamingService
+from ...shared.streaming_worker_base import StreamingWorkerBase
 
 logger = logging.getLogger(__name__)
 
 
-class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
+class AgentRegistry(StreamingWorkerBase[KafkaWorkerConfig]):
     """
     A registry for agents that can be used to manage and retrieve agents.
     
@@ -25,7 +25,7 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
     """
 
     def __init__(self,
-                 config: WorkerConfig,
+                 config: KafkaWorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
@@ -36,7 +36,7 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
         for coordinating agent availability across multiple workers.
         
         Args:
-            config (WorkerConfig): Configuration object containing registry settings
+            config (KafkaWorkerConfig): Configuration object containing registry settings
                 including the registry topic name and other worker configuration.
             streaming_service (Optional[StreamingService], optional): Service for handling
                 Kafka streaming operations. If None, a default service will be created.
@@ -60,7 +60,7 @@ class AgentRegistry(StreamingWorkerBase[WorkerConfig]):
         self._serializer = EventSerializer(
             topic=config.registry_topic,
             source_type=RegistrationEvent,
-            schema_registry_service=config.get_schema_registry_service()
+            schema_registry_service=self._kafka_config.get_schema_registry_service()
         )
 
     def _extract_agent_key(self, agent: Union[str, AgentType]) -> str:
