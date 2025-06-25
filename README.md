@@ -36,6 +36,12 @@ autogen-kafka/
 │   │   └── autogen-kafka-extension/     # Core Python extension package
 │   │       ├── src/
 │   │       │   └── autogen_kafka_extension/
+│   │       │       ├── agent/                       # Agent implementations
+│   │       │       │   ├── kafka_streaming_agent.py # Direct Kafka streaming agent
+│   │       │       │   ├── kafka_agent_config.py   # Agent configuration classes
+│   │       │       │   └── event/                  # Agent event definitions
+│   │       │       │       ├── agent_event.py      # Core agent event structure
+│   │       │       │       └── agent_event_serdes.py # Event serialization
 │   │       │       ├── memory/                      # Distributed memory implementation
 │   │       │       │   ├── kafka_memory.py         # Kafka-based memory provider
 │   │       │       │   └── memory_config.py        # Memory configuration
@@ -82,6 +88,7 @@ autogen-kafka/
 
 - **Python** (`python/`): Full-featured implementation with comprehensive agent runtime
   - AutoGen integration via `KafkaWorkerAgentRuntime`
+  - Direct agent communication with `KafkaStreamingAgent`
   - Kafka Streams processing with `kstreams`
   - CloudEvents support and OpenTelemetry tracing
   - See [Python README](python/README.md) for detailed usage
@@ -99,6 +106,16 @@ The extension provides language-specific implementations of agent runtimes that:
 - Route messages between agents via Kafka topics
 - Handle both synchronous (RPC) and asynchronous (pub/sub) communication patterns
 - Provide observability and error handling
+
+### Kafka Streaming Agent
+
+The `KafkaStreamingAgent` provides a direct Kafka-based communication layer for AutoGen agents:
+- **Direct Kafka Integration**: Agents communicate directly through Kafka topics without additional runtime layers
+- **Request-Response Correlation**: Built-in correlation mechanism for synchronous message patterns
+- **Event-Driven Processing**: Asynchronous message handling with Kafka Streams integration
+- **Serialization Support**: Automatic message serialization/deserialization with AutoGen's serialization registry
+- **Background Task Management**: Non-blocking message sending with background task coordination
+- **Configurable Topics**: Separate request and response topics for organized message flow
 
 ### Message Patterns
 
@@ -216,6 +233,8 @@ The extension uses standardized topic naming conventions:
 - `agent.responses` - Response correlation
 - `agent.subscription` - Agent subscription events
 - `agent.registry` - Agent lifecycle events
+- `agent_request` - KafkaStreamingAgent request topic (configurable)
+- `agent_response` - KafkaStreamingAgent response topic (configurable)
 - `memory.<session_id>` - Distributed memory synchronization (per session)
 
 ### Message Formats

@@ -3,7 +3,10 @@ from typing import Any
 
 from autogen_core import AgentId, TopicId
 
-class RequestEvent(object):
+from autogen_kafka_extension.shared.events.event_base import EventBase
+
+
+class RequestEvent(EventBase):
 
     @property
     def agent_id(self) -> AgentId | None:
@@ -69,7 +72,7 @@ class RequestEvent(object):
         self._error: str | None = error
 
 
-    def to_dict(self) -> dict[str, Any]:
+    def __dict__(self) -> dict[str, Any]:
         """Convert the Message object to a dictionary."""
         return {
             "message_id": self._message_id,
@@ -85,7 +88,7 @@ class RequestEvent(object):
         }
 
     @classmethod
-    def from_dict(cls, message_dict: dict[str, Any]) -> 'RequestEvent':
+    def __from_dict__(cls, message_dict: dict[str, Any]) -> 'RequestEvent':
         # Parse enums and objects from their string representations
         message_id = message_dict.get("message_id")
         agent_id = AgentId.from_str(message_dict["agent_id"]) if message_dict.get("agent_id") else None
@@ -110,3 +113,44 @@ class RequestEvent(object):
             metadata=metadata,
             error=error
         )
+
+    @classmethod
+    def __schema__(cls) -> str:
+        return """
+        {
+            "type": "object",
+            "properties": {
+                "message_id": {
+                    "type": ["string", "null"]
+                },
+                "topic_id": {
+                    "type": ["string", "null"]
+                },
+                "agent_id": {
+                    "type": ["string", "null"]
+                },
+                "request_id": {
+                    "type": ["string", "null"]
+                },
+                "recipient": {
+                    "type": ["string", "null"] 
+                },
+                "payload": {
+                    "type": ["string", "null"]
+                },
+                "payload_type": {
+                    "type": ["string", "null"]
+                },
+                "payload_format": {
+                    "type": ["string", "null"]
+                },
+                "metadata": {
+                    "type": "object"
+                },
+                "error": {
+                    "type": ["string", "null"]
+                }
+            }
+        }
+        """
+

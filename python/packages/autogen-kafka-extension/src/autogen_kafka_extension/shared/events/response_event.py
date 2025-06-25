@@ -3,8 +3,10 @@ from typing import Any
 
 from autogen_core import AgentId, TopicId
 
+from autogen_kafka_extension.shared.events.event_base import EventBase
 
-class ResponseEvent:
+
+class ResponseEvent(EventBase):
     @property
     def sender(self) -> AgentId | None:
         return self._sender
@@ -67,7 +69,7 @@ class ResponseEvent:
         self._metadata: dict[str, Any] | None = metadata
         self._error: str | None = error
 
-    def to_dict(self) -> dict[str, Any]:
+    def __dict__(self) -> dict[str, Any]:
         """Convert the Message object to a dictionary."""
         return {
             "message_id": self._message_id,
@@ -83,7 +85,7 @@ class ResponseEvent:
         }
 
     @classmethod
-    def from_dict(cls, message_dict: dict[str, Any]) -> 'ResponseEvent':
+    def __from_dict__(cls, message_dict: dict[str, Any]) -> 'ResponseEvent':
         # Parse enums and objects from their string representations
         message_id = message_dict.get("message_id")
         sender = AgentId.from_str(message_dict["sender"]) if message_dict.get("sender") else None
@@ -108,3 +110,22 @@ class ResponseEvent:
             metadata=metadata,
             error=error
         )
+
+    @classmethod
+    def __schema__(cls) -> str:
+        return """
+        {
+            "type": "object",
+            "properties": {
+                "message_id": {"type": ["string", "null"]},
+                "topic_id": {"type": ["string", "null"]},
+                "sender": {"type": ["string", "null"]}, 
+                "request_id": {"type": ["string", "null"]},
+                "recipient": {"type": ["string", "null"]},
+                "payload": {"type": ["string", "null"]},
+                "payload_type": {"type": ["string", "null"]},
+                "serialization_format": {"type": ["string", "null"]},
+                "metadata": {"type": "object"},
+                "error": {"type": ["string", "null"]}
+            }
+        }"""

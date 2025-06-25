@@ -5,8 +5,10 @@ from typing import Dict
 from autogen_core import Image
 from autogen_core.memory import MemoryContent, MemoryMimeType
 
+from autogen_kafka_extension.shared.events.event_base import EventBase
 
-class MemoryEvent:
+
+class MemoryEvent(EventBase):
     """
     Represents a memory event with a timestamp and a value.
     """
@@ -38,7 +40,7 @@ class MemoryEvent:
     def __repr__(self):
         return f"MemoryEvent(content={self._memory_content.__repr__()}, sender={self._sender})"
 
-    def to_dict(self):
+    def __dict__(self):
 
         mime_type = self._memory_content.mime_type
         if mime_type in [MemoryMimeType.TEXT, MemoryMimeType.MARKDOWN]:
@@ -71,7 +73,7 @@ class MemoryEvent:
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> "MemoryEvent":
+    def __from_dict__(cls, data: Dict[str, str]) -> "MemoryEvent":
         """
         Create a MemoryEvent instance from a dictionary.
 
@@ -108,3 +110,27 @@ class MemoryEvent:
         )
 
         return cls(memory_content=memory_content, sender=sender)
+
+    @classmethod
+    def __schema__(cls) -> str:
+        return """
+        {
+            "type": "object",
+            "properties": {
+                "sender": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "content": {
+                    "type": "string"
+                },
+                "metadata": {
+                    "type": ["string", "null"]
+                }
+            },
+            "required": ["sender", "mime_type", "content"]
+        }
+        """
+

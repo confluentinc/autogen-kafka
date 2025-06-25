@@ -87,9 +87,15 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
                          topic=config.subscription_topic,
                          monitoring=monitoring,
                          streaming_service=streaming_service,
-                         serialization_registry=serialization_registry)
+                         serialization_registry=serialization_registry,
+                         target_type=SubscriptionEvent)
         self._local_subscriptions = SubscriptionManager()
         self._global_subscriptions = SubscriptionManager()
+        self._subscription_serializer = EventSerializer(
+            topic=config.subscription_topic,
+            source_type=SubscriptionEvent,
+            schema_registry_service=config.get_schema_registry_service()
+        )
 
     async def get_local_recipients(self, topic_id: TopicId) -> List[AgentId]:
         """
@@ -242,7 +248,7 @@ class SubscriptionService(StreamingWorkerBase[WorkerConfig]):
             topic=self._config.subscription_topic,
             value=event,
             headers={},
-            serializer=EventSerializer()
+            serializer=self._subscription_serializer
         )
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:

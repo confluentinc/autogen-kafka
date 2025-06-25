@@ -1,5 +1,7 @@
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 from autogen_kafka_extension.shared.kafka_config import KafkaConfig
+from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryConfig
+
 
 class WorkerConfig(KafkaConfig):
     """
@@ -23,8 +25,10 @@ class WorkerConfig(KafkaConfig):
                  subscription_topic: str,
                  registry_topic: str,
                  response_topic: str,
+                 publish_topic: str,
                  group_id: str,
                  client_id: str,
+                 schema_registry_config: SchemaRegistryConfig,
                  bootstrap_servers: list[str],
                  num_partitions: int = 3,
                  replication_factor: int = 1,
@@ -41,6 +45,7 @@ class WorkerConfig(KafkaConfig):
             subscription_topic (str): The Kafka topic name for publishing subscription messages.
             registry_topic (str): The Kafka topic name for agent registry operations.
             response_topic (str): The Kafka topic name for publishing response messages.
+            publish_topic (str): The Kafka topic name for publishing messages.
             group_id (str): The Kafka consumer group ID for coordinating message consumption.
             client_id (str): A unique identifier for this Kafka client instance.
             bootstrap_servers (list[str]): List of Kafka broker addresses in 'host:port' format.
@@ -68,12 +73,22 @@ class WorkerConfig(KafkaConfig):
             security_protocol = security_protocol,
             security_mechanism = security_mechanism,
             sasl_plain_username = sasl_plain_username,
-            sasl_plain_password = sasl_plain_password
+            sasl_plain_password = sasl_plain_password,
+            schema_registry_config=schema_registry_config
             )
         self._request_topic: str = request_topic
         self._subscription: str = subscription_topic
         self._registry_topic: str = registry_topic
         self._response_topic: str = response_topic
+        self._publish_topic: str = publish_topic
+
+    @property
+    def publish_topic(self) -> str:
+        """
+        The Kafka topic to produce messages to.
+        If not set, the worker will not produce any messages.
+        """
+        return self._publish_topic
 
     @property
     def request_topic(self) -> str:

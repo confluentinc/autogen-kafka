@@ -7,11 +7,12 @@ from typing import Optional, Any, Sequence, Dict
 from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, MessageSerializer
 from autogen_core._telemetry import get_telemetry_grpc_metadata, TraceHelper
-from cloudevents.pydantic import CloudEvent
+from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension.runtimes.services import constants
+from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
@@ -69,7 +70,7 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
                  config: WorkerConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
-                 serialization_registry: SerializationRegistry = SerializationRegistry()
+                 serialization_registry: SerializationRegistry = SerializationRegistry(),
                  ) -> None:
         """Initialize the MessagingClient for sending and receiving messages via Kafka.
         
@@ -83,11 +84,21 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
                          topic=config.response_topic,
                          monitoring=monitoring,
                          streaming_service=streaming_service,
-                         serialization_registry=serialization_registry)
+                         serialization_registry=serialization_registry,
+                         target_type=ResponseEvent)
         # Request/response handling
         self._pending_requests: Dict[str, Future[Any]] = {}
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
+        self._cloud_event_serializer = EventSerializer(
+            topic = config.publish_topic,
+            source_type = CloudEvent,
+            schema_registry_service = config.get_schema_registry_service())
+        self._request_serializer = EventSerializer(
+            topic = config.request_topic,
+            source_type = RequestEvent,
+            schema_registry_service = config.get_schema_registry_service()
+        )
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
         """Add one or more message serializers to the serialization registry.
@@ -161,7 +172,8 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
                 super().send_message(
                     message = msg,
                     topic = self._config.request_topic,
-                    recipient=recipient)
+                    recipient=recipient,
+                    serializer=self._request_serializer)
             )
             return await future
 
@@ -198,35 +210,30 @@ class MessagingClient(StreamingWorkerBase[WorkerConfig]):
                 message, type_name=message_type, data_content_type=JSON_DATA_CONTENT_TYPE
             )
 
-            attributes = {
-                "id": message_id,
-                "source": topic_id.source,
-                "type": topic_id.type,
-                "attributes": {
+            cloud_evt: CloudEvent = CloudEvent[bytes](
+                source=topic_id.source,
+                type=topic_id.type,
+                id=message_id,
+                data=serialized_message,
+                dataschema=message_type,
+                datacontenttype=JSON_DATA_CONTENT_TYPE,
+                subject=topic_id.source,
+                extensions={
                     constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
                     constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
                     constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
                     constants.DATA_SCHEMA_ATTR: message_type,
                     constants.MESSAGE_KIND_ATTR: constants.MESSAGE_KIND_VALUE_PUBLISH,
                 },
-                constants.DATA_CONTENT_TYPE_ATTR: JSON_DATA_CONTENT_TYPE,
-                constants.DATA_SCHEMA_ATTR: message_type,
-                constants.MESSAGE_KIND_ATTR: constants.MESSAGE_KIND_VALUE_PUBLISH,
-                constants.AGENT_SENDER_TYPE_ATTR: sender.type if sender else None,
-                constants.AGENT_SENDER_KEY_ATTR: sender.key if sender else None,
-            }
-
-            cloud_evt: CloudEvent = CloudEvent(
-                attributes=attributes,
-                data=serialized_message,
             )
 
             # Send the message in the background
             self._background_task_manager.add_task(
                 super().send_message(
                     message=cloud_evt,
-                    topic=self._config.request_topic,
-                    recipient=topic_id)
+                    topic=self._config.publish_topic,
+                    recipient=topic_id,
+                    serializer=self._cloud_event_serializer)
                 )
 
     async def _get_new_request_id(self) -> str:

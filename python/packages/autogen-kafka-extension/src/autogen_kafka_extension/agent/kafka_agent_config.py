@@ -1,23 +1,20 @@
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 from autogen_kafka_extension.shared.kafka_config import KafkaConfig
-from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryConfig
 
 
-class MemoryConfig(KafkaConfig):
-    """
-    Configuration class for memory management in the Kafka extension.
-    This class is used to set and retrieve memory-related configurations.
-    """
+class KafkaAgentConfig(KafkaConfig):
+
     def __init__(self,
                  name: str,
                  group_id: str,
                  client_id: str,
                  bootstrap_servers: list[str],
-                 schema_registry_config: SchemaRegistryConfig,
-                 *,
+                 request_topic: str = "agent_request",
+                 response_topic: str = "agent_response",
+                 num_partitions: int = 3,
                  replication_factor: int = 1,
-                 memory_topic: str = "memory",
+                 auto_offset_reset: str = 'latest',
                  security_protocol: SecurityProtocol | None = None,
                  security_mechanism: SaslMechanism | None = None,
                  sasl_plain_username: str | None = None,
@@ -27,21 +24,28 @@ class MemoryConfig(KafkaConfig):
             group_id=group_id,
             client_id=client_id,
             bootstrap_servers=bootstrap_servers,
-            schema_registry_config=schema_registry_config,
-            num_partitions=1,
+            num_partitions=num_partitions,
             replication_factor=replication_factor,
+            is_compacted=False,
+            auto_offset_reset=auto_offset_reset,
             security_protocol=security_protocol,
             security_mechanism=security_mechanism,
             sasl_plain_username=sasl_plain_username,
-            sasl_plain_password=sasl_plain_password,
-            auto_offset_reset="earliest",  # Start consuming from the earliest message to rebuild memory
+            sasl_plain_password=sasl_plain_password
         )
-        self._memory_topic = memory_topic
+        self._request_topic: str = request_topic
+        self._response_topic: str = response_topic
 
     @property
-    def memory_topic(self) -> str:
+    def request_topic(self) -> str:
         """
-        The Kafka topic used for memory management.
-        This topic is where memory-related messages will be published and consumed.
+        The Kafka topic used for sending requests to the agent.
         """
-        return self._memory_topic
+        return self._request_topic
+
+    @property
+    def response_topic(self) -> str:
+        """
+        The Kafka topic used for receiving responses from the agent.
+        """
+        return self._response_topic

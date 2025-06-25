@@ -3,6 +3,9 @@ from confluent_kafka.admin import AdminClient
 from kstreams.backends import Kafka
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
+from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryService, SchemaRegistryConfig
+
+
 class KafkaConfig:
     @property
     def num_partitions(self) -> int:
@@ -41,6 +44,7 @@ class KafkaConfig:
                  group_id: str,
                  client_id: str,
                  bootstrap_servers: list[str],
+                 schema_registry_config: SchemaRegistryConfig,
                  num_partitions: int = 3,
                  replication_factor: int = 1,
                  is_compacted: bool = False,
@@ -83,6 +87,7 @@ class KafkaConfig:
         self._replication_factor = replication_factor
         self._is_compacted = is_compacted
         self._auto_offset_reset: str = auto_offset_reset
+        self._schema_registry_service: SchemaRegistryService = SchemaRegistryService(config=schema_registry_config)
 
     @property
     def client_id(self) -> str:
@@ -148,6 +153,24 @@ class KafkaConfig:
             sasl_plain_password=self._sasl_plain_password,
             ssl_context=create_ssl_context(),
         )
+
+    def get_schema_registry_service(self) -> SchemaRegistryService:
+        """
+        Create and configure a Schema Registry service instance.
+
+        This method creates a SchemaRegistryService configured with the
+        schema registry URL and optional authentication credentials. The service
+        can be used for managing schemas, serializing/deserializing messages,
+        and ensuring compatibility.
+
+        Returns:
+            SchemaRegistryService: A configured SchemaRegistryService instance.
+
+        Note:
+            - If no username or password is provided, the service will use basic authentication.
+            - The service will raise an error if the URL is not valid or if authentication fails.
+        """
+        return self._schema_registry_service
 
     def get_admin_client(self) -> AdminClient:
         """
