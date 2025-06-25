@@ -143,17 +143,47 @@ class MessageProcessor:
     async def process_request(self, request: RequestEvent, send: Send) -> None:
         """Process an incoming request message, invoke the agent, and send a response.
         
-        Handles direct agent-to-agent RPC requests by deserializing the request payload,
-        invoking the target agent, and sending back either a successful response or
-        an error response if processing fails.
+        This method handles direct agent-to-agent RPC requests by:
+        1. Deserializing the request payload using the serialization registry
+        2. Retrieving the target agent instance from the agent manager
+        3. Creating a message context with RPC metadata
+        4. Invoking the agent's message handler with distributed tracing
+        5. Serializing and sending the response back to the requester
+        6. Handling errors by sending error responses with telemetry data
+        
+        The method ensures that even if agent processing fails, a response is always
+        sent back to prevent the requester from waiting indefinitely.
         
         Args:
-            request: The request event containing the message payload, recipient info,
-                    and metadata
-            send: Kafka producer function for sending response messages
+            request: The request event containing:
+                    - recipient: Target agent ID
+                    - agent_id: Sender agent ID (optional)
+                    - payload: Serialized message data
+                    - payload_type: Message type for deserialization
+                    - payload_format: Content type (e.g., JSON)
+                    - request_id: Unique identifier for request correlation
+                    - metadata: Tracing and telemetry metadata
+            send: Kafka producer function for sending response messages back to
+                 the response topic. Must be async callable.
+                 
+        Returns:
+            None: This method doesn't return a value but sends responses via Kafka
             
         Raises:
-            RuntimeError: If sending the response message fails
+            Exception: Any exception during message processing is caught and converted
+                      to an error response. The original exception is logged but not
+                      re-raised to prevent disrupting the message processing loop.
+        
+        Example:
+            ```python
+            request = RequestEvent(
+                recipient=AgentId("chat_agent", "instance_1"),
+                payload=b'{"text": "Hello"}',
+                payload_type="ChatMessage",
+                request_id="req_123"
+            )
+            await processor.process_request(request, kafka_send_func)
+            ```
         """
         recipient = request.recipient
         sender = request.agent_id

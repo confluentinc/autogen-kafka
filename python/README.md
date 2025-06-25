@@ -90,7 +90,7 @@ pipenv install -e .[dev]
 
 ## 🏗 Architecture
 
-The extension provides three main components:
+The extension provides three main components for distributed agent communication:
 
 ### 1. Agent Runtime (`KafkaWorkerAgentRuntime`)
 A distributed agent runtime that enables agents to communicate across multiple processes and machines through Kafka topics.
@@ -100,6 +100,8 @@ A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen age
 
 ### 3. Distributed Memory (`KafkaMemory`)
 A memory implementation that synchronizes state across multiple agent instances using dedicated Kafka topics.
+
+For detailed architecture documentation, see [docs/api/README.md](packages/autogen-kafka-extension/docs/api/README.md).
 
 ## 🚀 Quick Start
 

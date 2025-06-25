@@ -76,6 +76,58 @@ class StreamingService(StreamEngine):
     def create_and_add_stream(self,
                               stream_config: StreamingServiceConfig,
                               func: StreamFunc) -> Stream:
+        """Create a Kafka stream with automatic topic management and deserialization.
+        
+        This method combines topic creation, stream configuration, and middleware setup
+        into a single convenient operation. It handles the common pattern of creating
+        a Kafka stream with event deserialization and optional topic auto-creation.
+        
+        The stream is configured with:
+        - Automatic event deserialization using the EventDeserializer middleware
+        - Schema Registry integration for type-safe message handling
+        - Consumer configuration from the stream config
+        - Topic auto-creation if enabled
+        
+        Args:
+            stream_config: Configuration object containing:
+                          - topic: Kafka topic name to consume from
+                          - name: Stream identifier for monitoring/debugging
+                          - target_type: Expected message type for deserialization
+                          - auto_create_topics: Whether to create topics automatically
+                          - Consumer configuration parameters
+            func: Stream processing function that handles deserialized messages.
+                 Must accept (ConsumerRecord, Stream, Send) parameters and return
+                 None or a ConsumerRecord.
+                 
+        Returns:
+            Stream: The configured and registered Kafka stream instance. The stream
+                   is already added to the StreamEngine and ready for processing.
+                   
+        Raises:
+            KafkaException: If topic creation fails or Kafka connection issues occur
+            ValueError: If stream_config is invalid or target_type is unsupported
+            
+        Example:
+            ```python
+            async def process_events(record, stream, send):
+                event = record.value  # Already deserialized by middleware
+                print(f"Received event: {event}")
+            
+            config = StreamingServiceConfig(
+                topic="user.events",
+                name="user-processor",
+                target_type=UserEvent,
+                auto_create_topics=True
+            )
+            
+            stream = service.create_and_add_stream(config, process_events)
+            ```
+            
+        Note:
+            The stream is automatically registered with the StreamEngine and will
+            begin processing messages when the engine starts. Topics are created
+            synchronously before stream creation if auto_create_topics is enabled.
+        """
 
         # Create topics if requested
         if stream_config.auto_create_topics:
