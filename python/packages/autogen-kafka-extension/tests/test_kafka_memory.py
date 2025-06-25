@@ -455,15 +455,12 @@ class TestKafkaSMemory:
     ) -> KafkaMemoryConfig:
         """Helper function to create a MemoryConfig with standard settings."""
         return KafkaMemoryConfig(
-            kafka_config=KafkaConfig(
-                name=f"{name}_{group_suffix}_{client_suffix}",
-                security_protocol=SecurityProtocol.PLAINTEXT,
-                security_mechanism=SaslMechanism.PLAIN,
-                bootstrap_servers=[connection],
-                group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
-                client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
-                schema_registry_config=SchemaRegistryConfig(url=sr_connection),
-                auto_offset_reset= "earliest",
-            ),
+            name=f"{name}_{group_suffix}_{client_suffix}",
+            security_protocol=SecurityProtocol.PLAINTEXT,
+            security_mechanism=SaslMechanism.PLAIN,
+            bootstrap_servers=[connection],
+            group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
+            client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
+            schema_registry_config=SchemaRegistryConfig(url=sr_connection),
             memory_topic=TOPIC_NAMES["memory"],
         )

@@ -10,7 +10,7 @@ from confluent_kafka.schema_registry._sync.serde import BaseDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 
 from .event_base import EventBase
-from ...config.schema_registry_service import SchemaRegistryService
+from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryService
 from .cloudevent_schema import get_cloudevent_json_schema_compact, \
     cloud_event_to_dict, cloud_event_from_dict
 

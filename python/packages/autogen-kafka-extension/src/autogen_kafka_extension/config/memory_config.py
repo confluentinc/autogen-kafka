@@ -3,7 +3,12 @@
 This module provides configuration classes specifically for Kafka-based memory
 management, including memory topic settings and persistence configuration.
 """
+from typing import Optional
+
+from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
+
 from .service_base_config import ServiceBaseConfig
+from .schema_registry_config import SchemaRegistryConfig
 from .kafka_config import KafkaConfig
 
 
@@ -21,8 +26,20 @@ class KafkaMemoryConfig(ServiceBaseConfig):
     
     def __init__(
         self,
-        kafka_config: KafkaConfig,
+        name: str,
+        group_id: str,
+        client_id: str,
+        bootstrap_servers: list[str],
+        schema_registry_config: SchemaRegistryConfig,
         *,
+        auto_offset_reset: str = "earliest", # Ensure we start from the beginning to rebuild memory
+        num_partitions: int = 1,
+        replication_factor: int = 1,
+        is_compacted: bool = False,
+        security_protocol: Optional[SecurityProtocol] = None,
+        security_mechanism: Optional[SaslMechanism] = None,
+        sasl_plain_username: Optional[str] = None,
+        sasl_plain_password: Optional[str] = None,
         memory_topic: str = "memory",
     ) -> None:
         """Initialize the Kafka memory configuration.
@@ -34,7 +51,23 @@ class KafkaMemoryConfig(ServiceBaseConfig):
         Raises:
             ValueError: If required parameters are missing or invalid.
         """
-        super().__init__(kafka_config=kafka_config)
+        super().__init__(
+            kafka_config=KafkaConfig(
+                name=name,
+                group_id=group_id,
+                client_id=client_id,
+                bootstrap_servers=bootstrap_servers,
+                schema_registry_config=schema_registry_config,
+                num_partitions=num_partitions,
+                replication_factor=replication_factor,
+                is_compacted=is_compacted,
+                security_protocol=security_protocol,
+                security_mechanism=security_mechanism,
+                sasl_plain_username=sasl_plain_username,
+                sasl_plain_password=sasl_plain_password,
+                auto_offset_reset=auto_offset_reset,
+            )
+        )
 
         self._memory_topic = memory_topic
     

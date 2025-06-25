@@ -12,7 +12,7 @@ from .schema_registry_config import SchemaRegistryConfig
 from .service_base_config import ServiceBaseConfig
 from .worker_config import KafkaWorkerConfig
 from .streaming_config import StreamingServiceConfig
-from .schema_registry_service import SchemaRegistryService
+from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryService
 
 __all__ = [
     "ServiceBaseConfig",
