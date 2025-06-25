@@ -4,9 +4,12 @@ This module provides configuration classes specifically for Kafka worker runtime
 including all the topics needed for distributed agent coordination and messaging.
 """
 from .service_base_config import ServiceBaseConfig
+from .base_config import ValidationResult
+from .auto_validate import auto_validate_after_init
 from .kafka_config import KafkaConfig
 
 
+@auto_validate_after_init
 class KafkaWorkerConfig(ServiceBaseConfig):
     """Configuration for Kafka worker runtimes.
     
@@ -88,14 +91,12 @@ class KafkaWorkerConfig(ServiceBaseConfig):
             self._publish_topic,
         ]
     
-    def validate(self) -> None:
-        """Validate the worker configuration parameters.
-        
-        Raises:
-            ValueError: If any configuration parameters are invalid.
-        """
-        # Call parent validation
-        super().validate()
+    def _validate_impl(self) -> ValidationResult:
+        """Validate the worker configuration parameters."""
+        # First get the parent validation result
+        parent_result = super()._validate_impl()
+        errors = list(parent_result.errors)
+        warnings = list(parent_result.warnings) if parent_result.warnings else []
         
         # Validate worker-specific settings
         topics = {
@@ -109,11 +110,15 @@ class KafkaWorkerConfig(ServiceBaseConfig):
         # Check that all topics are non-empty
         for topic_name, topic_value in topics.items():
             if not topic_value or not topic_value.strip():
-                raise ValueError(f"{topic_name} cannot be empty")
+                errors.append(f"{topic_name} cannot be empty")
         
         # Check that all topics are unique
         topic_values = list(topics.values())
         if len(set(topic_values)) != len(topic_values):
-            raise ValueError("All worker topics must be unique")
-        
-        self._validated = True 
+            errors.append("All worker topics must be unique")
+
+        return ValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings
+        ) 

@@ -7,10 +7,12 @@ that are used by Kafka configurations for serialization/deserialization.
 from typing import Dict, Optional
 import logging
 
-from .base_config import BaseConfig
+from .base_config import BaseConfig, ValidationResult
+from .auto_validate import auto_validate_after_init
 
 logger = logging.getLogger(__name__)
 
+@auto_validate_after_init
 class SchemaRegistryConfig(BaseConfig):
     """Configuration for Schema Registry."""
 
@@ -44,18 +46,33 @@ class SchemaRegistryConfig(BaseConfig):
 
         return config
 
-    def validate(self) -> None:
-        super().validate()
+    def _validate_impl(self) -> ValidationResult:
+        """Validate the Schema Registry configuration."""
+        errors = []
+        warnings = []
 
-        """Validate the configuration."""
         if not self.url:
-            raise ValueError("Schema Registry URL must be provided.")
+            errors.append("Schema Registry URL must be provided.")
+        
         if self.api_key and not self.api_secret:
-            raise ValueError("API key provided without API secret.")
+            errors.append("API key provided without API secret.")
+        
         if self.api_secret and not self.api_key:
-            raise ValueError("API secret provided without API key.")
+            errors.append("API secret provided without API key.")
+        
         if self.ssl_ca_location and not (self.ssl_cert_location and self.ssl_key_location):
-            raise ValueError("SSL CA location requires both certificate and key locations to be set.")
+            errors.append("SSL CA location requires both certificate and key locations to be set.")
 
-        self._validated = True
+        # Add some warnings for common configuration issues
+        if not self.api_key and not self.api_secret:
+            warnings.append("No authentication configured for Schema Registry.")
+        
+        if self.url.startswith("http://") and not self.url.startswith("http://localhost"):
+            warnings.append("Using HTTP (not HTTPS) for Schema Registry connection.")
+
+        return ValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings
+        )
 

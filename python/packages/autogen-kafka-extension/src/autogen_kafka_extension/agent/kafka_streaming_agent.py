@@ -181,6 +181,16 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         when the agent is being shut down.
         """
         logging.info("Closing KafkaStreamingAgent and releasing resources.")
+        
+        # Cancel all pending requests with appropriate error
+        async with self._pending_requests_lock:
+            for request_id, future in self._pending_requests.items():
+                if not future.done():
+                    future.set_exception(
+                        asyncio.CancelledError("Agent is being closed")
+                    )
+            self._pending_requests.clear()
+        
         # Wait for all background tasks to complete before closing
         await self._background_task_manager.wait_for_completion()
 

@@ -4,9 +4,12 @@ This module provides configuration classes specifically for Kafka-based agents,
 including request/response topic management and agent-specific settings.
 """
 from .service_base_config import ServiceBaseConfig
+from .base_config import ValidationResult
+from .auto_validate import auto_validate_after_init
 from .kafka_config import KafkaConfig
 
 
+@auto_validate_after_init
 class KafkaAgentConfig(ServiceBaseConfig):
     """Configuration for Kafka-based agents.
     
@@ -46,24 +49,26 @@ class KafkaAgentConfig(ServiceBaseConfig):
         """Get the Kafka topic used for receiving responses from the agent."""
         return self._response_topic
     
-    def validate(self) -> None:
-        """Validate the agent configuration parameters.
-        
-        Raises:
-            ValueError: If any configuration parameters are invalid.
-        """
-        # Call parent validation
-        super().validate()
+    def _validate_impl(self) -> ValidationResult:
+        """Validate the agent configuration parameters."""
+        # First get the parent validation result
+        parent_result = super()._validate_impl()
+        errors = list(parent_result.errors)
+        warnings = list(parent_result.warnings) if parent_result.warnings else []
         
         # Validate agent-specific settings
         if not self._request_topic or not self._request_topic.strip():
-            raise ValueError("request_topic cannot be empty")
+            errors.append("request_topic cannot be empty")
         
         if not self._response_topic or not self._response_topic.strip():
-            raise ValueError("response_topic cannot be empty")
+            errors.append("response_topic cannot be empty")
         
         # Request and response topics should be different
         if self._request_topic == self._response_topic:
-            raise ValueError("request_topic and response_topic must be different")
-        
-        self._validated = True 
+            errors.append("request_topic and response_topic must be different")
+
+        return ValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings
+        ) 

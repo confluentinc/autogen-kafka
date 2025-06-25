@@ -7,11 +7,14 @@ from typing import Optional
 
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
-from .service_base_config import ServiceBaseConfig
+from .service_base_config import ServiceBaseConfig  
+from .base_config import ValidationResult
+from .auto_validate import auto_validate_after_init
 from .schema_registry_config import SchemaRegistryConfig
 from .kafka_config import KafkaConfig
 
 
+@auto_validate_after_init
 class KafkaMemoryConfig(ServiceBaseConfig):
     """Configuration for Kafka-based memory management.
     
@@ -80,17 +83,19 @@ class KafkaMemoryConfig(ServiceBaseConfig):
         """
         return self._memory_topic
     
-    def validate(self) -> None:
-        """Validate the memory configuration parameters.
-        
-        Raises:
-            ValueError: If any configuration parameters are invalid.
-        """
-        # Call parent validation
-        super().validate()
+    def _validate_impl(self) -> ValidationResult:
+        """Validate the memory configuration parameters."""
+        # First get the parent validation result
+        parent_result = super()._validate_impl()
+        errors = list(parent_result.errors)
+        warnings = list(parent_result.warnings) if parent_result.warnings else []
         
         # Validate memory-specific settings
         if not self._memory_topic or not self._memory_topic.strip():
-            raise ValueError("memory_topic cannot be empty")
+            errors.append("memory_topic cannot be empty")
 
-        self._validated = True 
+        return ValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings
+        ) 

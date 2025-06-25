@@ -13,8 +13,10 @@ from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 from .schema_registry_config import SchemaRegistryConfig
 from .schema_registry_service import SchemaRegistryService
-from .base_config import BaseConfig
+from .base_config import BaseConfig, ValidationResult
+from .auto_validate import auto_validate_after_init
 
+@auto_validate_after_init
 class KafkaConfig(BaseConfig):
     """Core Kafka configuration with schema registry and administrative capabilities.
     
@@ -232,50 +234,68 @@ class KafkaConfig(BaseConfig):
         
         return AdminClient(conf=config)
     
-    def validate(self) -> None:
-        """Validate the Kafka configuration parameters.
-        
-        Raises:
-            ValueError: If any configuration parameters are invalid.
-        """
+    def _validate_impl(self) -> ValidationResult:
+        """Validate the Kafka configuration parameters."""
+        errors = []
+        warnings = []
+
+        # Validate required string fields
         if not self._group_id or not self._group_id.strip():
-            raise ValueError("group_id cannot be empty")
+            errors.append("group_id cannot be empty")
 
         if not self._client_id or not self._client_id.strip():
-            raise ValueError("client_id cannot be empty")
+            errors.append("client_id cannot be empty")
 
         if not self._bootstrap_servers:
-            raise ValueError("bootstrap_servers cannot be empty")
+            errors.append("bootstrap_servers cannot be empty")
 
         # Validate bootstrap server format
         for server in self._bootstrap_servers:
             if not server or ':' not in server:
-                raise ValueError(f"Invalid bootstrap server format: {server}")
+                errors.append(f"Invalid bootstrap server format: {server}")
 
         # Validate SASL authentication requirements
         if self._security_protocol and self._security_protocol != SecurityProtocol.PLAINTEXT:
             if self._security_mechanism == SaslMechanism.PLAIN:
                 if not self._sasl_plain_username or not self._sasl_plain_password:
-                    raise ValueError(
-                        "SASL PLAIN authentication requires both username and password"
-                    )
-
-        self._validated = True
+                    errors.append("SASL PLAIN authentication requires both username and password")
 
         # Validate topic settings
         if self._num_partitions < 1:
-            raise ValueError("num_partitions must be at least 1")
+            errors.append("num_partitions must be at least 1")
         
         if self._replication_factor < 1:
-            raise ValueError("replication_factor must be at least 1")
+            errors.append("replication_factor must be at least 1")
         
         if self._auto_offset_reset not in ['earliest', 'latest', 'none']:
-            raise ValueError(
-                "auto_offset_reset must be one of: 'earliest', 'latest', 'none'"
-            )
+            errors.append("auto_offset_reset must be one of: 'earliest', 'latest', 'none'")
         
         # Validate schema registry config
         if not self._schema_registry_config:
-            raise ValueError("schema_registry_config is required")
+            errors.append("schema_registry_config is required")
+        else:
+            # Validate the schema registry config as well
+            try:
+                schema_result = self._schema_registry_config.validate()
+                if not schema_result.is_valid:
+                    errors.extend([f"Schema Registry: {error}" for error in schema_result.errors])
+                if schema_result.warnings:
+                    warnings.extend([f"Schema Registry: {warning}" for warning in schema_result.warnings])
+            except Exception as e:
+                errors.append(f"Schema Registry validation failed: {e}")
+
+        # Add warnings for common configuration issues
+        if self._replication_factor == 1:
+            warnings.append("Replication factor of 1 provides no fault tolerance")
         
-        self._validated = True 
+        if self._num_partitions == 1:
+            warnings.append("Single partition may limit throughput")
+        
+        if self._security_protocol == SecurityProtocol.PLAINTEXT:
+            warnings.append("Using PLAINTEXT security protocol - consider using SSL/SASL for production")
+
+        return ValidationResult(
+            is_valid=len(errors) == 0,
+            errors=errors,
+            warnings=warnings
+        ) 
