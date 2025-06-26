@@ -3,6 +3,7 @@
 This module provides configuration classes specifically for Kafka worker runtimes,
 including all the topics needed for distributed agent coordination and messaging.
 """
+from typing import Any, Dict
 from .service_base_config import ServiceBaseConfig
 from .base_config import ValidationResult
 from .auto_validate import auto_validate_after_init
@@ -91,6 +92,72 @@ class KafkaWorkerConfig(ServiceBaseConfig):
             self._publish_topic,
         ]
     
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'KafkaWorkerConfig':
+        """Create a KafkaWorkerConfig instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing configuration parameters.
+            Expected structure:
+            {
+                'kafka': {
+                    'name': str,
+                    'group_id': str,
+                    'client_id': str,
+                    'bootstrap_servers': list[str] or str,
+                    'schema_registry': {
+                        'url': str,
+                        'username': str (optional),
+                        'password': str (optional)
+                    },
+                    ... (other kafka config parameters)
+                },
+                'worker': {
+                    'request_topic': str (optional, default='worker_requests'),
+                    'response_topic': str (optional, default='worker_responses'),
+                    'registry_topic': str (optional, default='agent_registry'),
+                    'subscription_topic': str (optional, default='agent_subscriptions'),
+                    'publish_topic': str (optional, default='agent_publishes')
+                }
+            }
+            
+        Returns:
+            KafkaWorkerConfig instance.
+            
+        Raises:
+            ValueError: If required parameters are missing or invalid.
+        """
+        # Extract kafka configuration
+        kafka_data = data.get('kafka', {})
+        if not kafka_data:
+            raise ValueError("'kafka' configuration is required")
+        
+        # If schema_registry is at the top level (from environment variables), 
+        # move it into the kafka_data
+        if 'schema_registry' in data and 'schema_registry' not in kafka_data:
+            kafka_data['schema_registry'] = data['schema_registry']
+        
+        kafka_config = KafkaConfig.from_dict(kafka_data)
+        
+        # Extract worker-specific configuration
+        worker_data = data.get('worker', {})
+        
+        # Get worker topic names with defaults
+        request_topic = worker_data.get('request_topic', 'worker_requests')
+        response_topic = worker_data.get('response_topic', 'worker_responses')
+        registry_topic = worker_data.get('registry_topic', 'agent_registry')
+        subscription_topic = worker_data.get('subscription_topic', 'agent_subscriptions')
+        publish_topic = worker_data.get('publish_topic', 'agent_publishes')
+        
+        return cls(
+            kafka_config=kafka_config,
+            request_topic=request_topic,
+            response_topic=response_topic,
+            registry_topic=registry_topic,
+            subscription_topic=subscription_topic,
+            publish_topic=publish_topic
+        )
+
     def _validate_impl(self) -> ValidationResult:
         """Validate the worker configuration parameters."""
         # First get the parent validation result

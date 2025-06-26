@@ -15,6 +15,7 @@ from .schema_registry_config import SchemaRegistryConfig
 from .schema_registry_service import SchemaRegistryService
 from .base_config import BaseConfig, ValidationResult
 from .auto_validate import auto_validate_after_init
+from typing import Dict, Any
 
 @auto_validate_after_init
 class KafkaConfig(BaseConfig):
@@ -298,4 +299,99 @@ class KafkaConfig(BaseConfig):
             is_valid=len(errors) == 0,
             errors=errors,
             warnings=warnings
+        )
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'KafkaConfig':
+        """Create a KafkaConfig instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing configuration parameters.
+            Expected structure:
+            {
+                'name': str,
+                'group_id': str,
+                'client_id': str,
+                'bootstrap_servers': list[str] or str (comma-separated),
+                'schema_registry': {
+                    'url': str,
+                    'username': str (optional),
+                    'password': str (optional)
+                },
+                'num_partitions': int (optional, default=3),
+                'replication_factor': int (optional, default=1),
+                'is_compacted': bool (optional, default=False),
+                'auto_offset_reset': str (optional, default='latest'),
+                'security_protocol': str (optional),
+                'security_mechanism': str (optional),
+                'sasl_plain_username': str (optional),
+                'sasl_plain_password': str (optional)
+            }
+            
+        Returns:
+            KafkaConfig instance.
+            
+        Raises:
+            ValueError: If required parameters are missing or invalid.
+        """
+        # Extract required parameters
+        name = data.get('name')
+        if not name:
+            raise ValueError("'name' is required in configuration")
+            
+        group_id = data.get('group_id')
+        if not group_id:
+            raise ValueError("'group_id' is required in configuration")
+            
+        client_id = data.get('client_id')
+        if not client_id:
+            raise ValueError("'client_id' is required in configuration")
+        
+        # Handle bootstrap_servers - can be string or list
+        bootstrap_servers = data.get('bootstrap_servers')
+        if not bootstrap_servers:
+            raise ValueError("'bootstrap_servers' is required in configuration")
+        
+        if isinstance(bootstrap_servers, str):
+            bootstrap_servers = [server.strip() for server in bootstrap_servers.split(',')]
+        
+        # Create schema registry config
+        schema_registry_data = data.get('schema_registry', {})
+        if not schema_registry_data.get('url'):
+            raise ValueError("'schema_registry.url' is required in configuration")
+            
+        schema_registry_config = SchemaRegistryConfig.from_dict(schema_registry_data)
+        
+        # Extract optional parameters with defaults
+        num_partitions = data.get('num_partitions', 3)
+        replication_factor = data.get('replication_factor', 1)
+        is_compacted = data.get('is_compacted', False)
+        auto_offset_reset = data.get('auto_offset_reset', 'latest')
+        
+        # Handle security settings
+        security_protocol = None
+        if data.get('security_protocol'):
+            security_protocol = SecurityProtocol(data['security_protocol'])
+            
+        security_mechanism = None
+        if data.get('security_mechanism'):
+            security_mechanism = SaslMechanism(data['security_mechanism'])
+        
+        sasl_plain_username = data.get('sasl_plain_username')
+        sasl_plain_password = data.get('sasl_plain_password')
+        
+        return cls(
+            name=name,
+            group_id=group_id,
+            client_id=client_id,
+            bootstrap_servers=bootstrap_servers,
+            schema_registry_config=schema_registry_config,
+            num_partitions=num_partitions,
+            replication_factor=replication_factor,
+            is_compacted=is_compacted,
+            auto_offset_reset=auto_offset_reset,
+            security_protocol=security_protocol,
+            security_mechanism=security_mechanism,
+            sasl_plain_username=sasl_plain_username,
+            sasl_plain_password=sasl_plain_password
         ) 

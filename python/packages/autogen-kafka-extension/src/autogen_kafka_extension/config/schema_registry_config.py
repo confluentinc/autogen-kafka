@@ -4,7 +4,7 @@ This module provides Schema Registry configuration and service classes
 that are used by Kafka configurations for serialization/deserialization.
 """
 
-from typing import Dict, Optional
+from typing import Dict, Optional, Any
 import logging
 
 from .base_config import BaseConfig, ValidationResult
@@ -74,5 +74,45 @@ class SchemaRegistryConfig(BaseConfig):
             is_valid=len(errors) == 0,
             errors=errors,
             warnings=warnings
+        )
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'SchemaRegistryConfig':
+        """Create a SchemaRegistryConfig instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing configuration parameters.
+            Expected structure:
+            {
+                'url': str (optional, default='http://localhost:8081'),
+                'api_key': str (optional),
+                'api_secret': str (optional),
+                'username': str (optional, alias for api_key),
+                'password': str (optional, alias for api_secret),
+                'ssl_ca_location': str (optional),
+                'ssl_cert_location': str (optional),
+                'ssl_key_location': str (optional)
+            }
+            
+        Returns:
+            SchemaRegistryConfig instance.
+        """
+        url = data.get('url', 'http://localhost:8081')
+        
+        # Support both api_key/api_secret and username/password
+        api_key = data.get('api_key') or data.get('username')
+        api_secret = data.get('api_secret') or data.get('password')
+        
+        ssl_ca_location = data.get('ssl_ca_location')
+        ssl_cert_location = data.get('ssl_cert_location')
+        ssl_key_location = data.get('ssl_key_location')
+        
+        return cls(
+            url=url,
+            api_key=api_key,
+            api_secret=api_secret,
+            ssl_ca_location=ssl_ca_location,
+            ssl_cert_location=ssl_cert_location,
+            ssl_key_location=ssl_key_location
         )
 

@@ -5,11 +5,12 @@ and validation logic used across all configuration classes in the extension.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar, Generic
+from typing import Any, Dict, Optional, TypeVar, Generic, Union, Type, cast
 from dataclasses import dataclass
+from pathlib import Path
 import threading
 
-T = TypeVar('T')
+T = TypeVar('T', bound='BaseConfig')
 
 class ConfigValidationError(Exception):
     """Raised when configuration validation fails."""
@@ -136,7 +137,81 @@ class BaseConfig(ABC):
         """
         self.validate()
     
-
+    @classmethod
+    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+        """Create a configuration instance from a dictionary.
+        
+        This method should be implemented by subclasses to create instances
+        from dictionary data loaded from files or environment variables.
+        
+        Args:
+            data: Dictionary containing configuration parameters.
+            
+        Returns:
+            Configuration instance.
+            
+        Raises:
+            NotImplementedError: If not implemented by subclass.
+        """
+        raise NotImplementedError("Subclasses must implement from_dict method")
+    
+    @classmethod
+    def from_file(
+        cls: Type[T], 
+        config_file: Union[str, Path],
+        env_prefix: str = "AUTOGEN_KAFKA",
+        base_config: Optional[Dict[str, Any]] = None
+    ) -> T:
+        """Load configuration from a file with optional environment variable overrides.
+        
+        Args:
+            config_file: Path to JSON or YAML configuration file.
+            env_prefix: Prefix for environment variables that can override file values.
+            base_config: Base configuration dictionary to merge with.
+            
+        Returns:
+            Configuration instance loaded from file and environment.
+            
+        Raises:
+            FileNotFoundError: If the configuration file doesn't exist.
+            ValueError: If the file format is invalid.
+        """
+        # Import here to avoid circular imports
+        from .config_loader import ConfigLoader
+        
+        merged_config = ConfigLoader.load_config(
+            config_file=config_file,
+            env_prefix=env_prefix,
+            base_config=base_config
+        )
+        
+        return cls.from_dict(merged_config)
+    
+    @classmethod
+    def from_env(
+        cls: Type[T],
+        env_prefix: str = "AUTOGEN_KAFKA",
+        base_config: Optional[Dict[str, Any]] = None
+    ) -> T:
+        """Load configuration from environment variables.
+        
+        Args:
+            env_prefix: Prefix for environment variables.
+            base_config: Base configuration dictionary to merge with.
+            
+        Returns:
+            Configuration instance loaded from environment variables.
+        """
+        # Import here to avoid circular imports
+        from .config_loader import ConfigLoader
+        
+        merged_config = ConfigLoader.load_config(
+            config_file=None,
+            env_prefix=env_prefix,
+            base_config=base_config
+        )
+        
+        return cls.from_dict(merged_config)
 
     def __repr__(self) -> str:
         """Return string representation of the configuration."""

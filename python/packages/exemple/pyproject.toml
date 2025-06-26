@@ -3,10 +3,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "autogen-kafka-extension"
+name = "autogen-kafka-extension-sample"
 version = "0.1.0"
-description = "autogen kafka support extension"
-keywords = ["autogen", "kafka", "extension"]
+description = "autogen kafka support extension sample"
+keywords = ["autogen", "kafka", "extension", "sample"]
 requires-python = ">=3.10"
 dependencies = [
     "autogen>=0.6.1",

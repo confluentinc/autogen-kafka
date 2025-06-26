@@ -7,6 +7,7 @@ from .service_base_config import ServiceBaseConfig
 from .base_config import ValidationResult
 from .auto_validate import auto_validate_after_init
 from .kafka_config import KafkaConfig
+from typing import Dict, Any
 
 
 @auto_validate_after_init
@@ -71,4 +72,42 @@ class KafkaAgentConfig(ServiceBaseConfig):
             is_valid=len(errors) == 0,
             errors=errors,
             warnings=warnings
+        )
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'KafkaAgentConfig':
+        """Create a KafkaAgentConfig instance from a dictionary.
+        
+        Args:
+            data: Dictionary containing configuration parameters.
+            Expected structure:
+            {
+                'kafka': {
+                    # KafkaConfig parameters
+                },
+                'request_topic': str (optional, default='agent_request'),
+                'response_topic': str (optional, default='agent_response')
+            }
+            
+        Returns:
+            KafkaAgentConfig instance.
+            
+        Raises:
+            ValueError: If required parameters are missing or invalid.
+        """
+        # Extract Kafka configuration
+        kafka_data = data.get('kafka', {})
+        if not kafka_data:
+            raise ValueError("'kafka' configuration is required")
+            
+        kafka_config = KafkaConfig.from_dict(kafka_data)
+        
+        # Extract agent-specific parameters
+        request_topic = data.get('request_topic', 'agent_request')
+        response_topic = data.get('response_topic', 'agent_response')
+        
+        return cls(
+            kafka_config=kafka_config,
+            request_topic=request_topic,
+            response_topic=response_topic
         ) 
