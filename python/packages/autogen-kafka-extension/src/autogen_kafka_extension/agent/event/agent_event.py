@@ -1,7 +1,7 @@
 import base64
 from typing import Dict
 
-from autogen_kafka_extension.shared.events.event_base import EventBase
+from ...shared.events.event_base import EventBase
 
 
 class AgentEvent(EventBase):

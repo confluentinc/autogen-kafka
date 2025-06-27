@@ -3,7 +3,7 @@ from typing import Any
 
 from autogen_core import AgentId, TopicId
 
-from autogen_kafka_extension.shared.events.event_base import EventBase
+from .event_base import EventBase
 
 
 class RequestEvent(EventBase):

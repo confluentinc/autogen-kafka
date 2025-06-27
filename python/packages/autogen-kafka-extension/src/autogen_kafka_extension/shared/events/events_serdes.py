@@ -1,5 +1,5 @@
 import logging
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any
 
 from kstreams import types, Stream
 from kstreams.middleware import BaseMiddleware
@@ -9,9 +9,9 @@ from azure.core.messaging import CloudEvent
 from confluent_kafka.schema_registry._sync.serde import BaseDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 
-from autogen_kafka_extension.shared.events.event_base import EventBase
-from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryService
-from autogen_kafka_extension.shared.events.cloudevent_schema import get_cloudevent_json_schema_compact, \
+from .event_base import EventBase
+from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryService
+from .cloudevent_schema import get_cloudevent_json_schema_compact, \
     cloud_event_to_dict, cloud_event_from_dict
 
 

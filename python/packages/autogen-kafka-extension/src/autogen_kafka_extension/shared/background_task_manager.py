@@ -38,17 +38,40 @@ class BackgroundTaskManager:
         self._background_tasks: Set[Task[Any]] = set()
     
     def add_task(self, coro: Coroutine[Any, Any, Any]) -> None:
-        """
-        Add a coroutine as a background task and track its completion.
+        """Add a coroutine as a background task and track its completion.
         
-        Creates an asyncio task from the provided coroutine and adds it to the
-        internal tracking set. The task will automatically remove itself from
-        the tracking set when it completes, and any exceptions will be raised
-        through the done callback.
+        This method provides fire-and-forget task execution with proper error
+        handling and lifecycle management. The task is automatically tracked
+        and cleaned up when it completes.
+        
+        Key behaviors:
+        - Task is immediately scheduled for execution
+        - Exceptions are propagated via the done callback (preventing silent failures)
+        - Task automatically removes itself from tracking when complete
+        - Multiple tasks can be added and will run concurrently
         
         Args:
-            coro: The coroutine to run as a background task. Must be a coroutine
-                 object (not just any awaitable).
+            coro: The coroutine to run as a background task. Must be a proper
+                 coroutine object (created with async def or async generator),
+                 not just any awaitable like a Future or Task.
+                
+        Raises:
+            TypeError: If coro is not a coroutine object
+            RuntimeError: If called from outside an asyncio event loop context
+            
+        Example:
+            ```python
+            async def send_notification(message: str):
+                await kafka_producer.send("notifications", message)
+            
+            task_manager = BackgroundTaskManager()
+            task_manager.add_task(send_notification("Hello World"))
+            ```
+            
+        Note:
+            Tasks added via this method will continue running even if the original
+            caller completes. Use wait_for_completion() to ensure all tasks finish
+            before shutting down.
         """
         task = asyncio.create_task(coro)
         self._background_tasks.add(task)
@@ -56,19 +79,43 @@ class BackgroundTaskManager:
         task.add_done_callback(self._background_tasks.discard)
     
     async def wait_for_completion(self) -> None:
-        """
-        Wait for all background tasks to complete.
+        """Wait for all background tasks to complete with proper error handling.
         
-        This method will block until all currently tracked background tasks
-        have finished executing. If any tasks raise exceptions, those exceptions
-        will be logged as errors but will not prevent other tasks from completing.
+        This method provides graceful shutdown capabilities by ensuring all
+        background tasks finish before the application terminates. It uses
+        asyncio.gather with return_exceptions=True to handle task failures
+        gracefully without interrupting other tasks.
+        
+        Behavior:
+        - Waits for all currently tracked tasks (snapshot at call time)
+        - New tasks added during waiting are not included
+        - Exceptions from individual tasks are logged but don't stop waiting
+        - Method completes only when all tasks finish (success or failure)
+        - Returns immediately if no tasks are currently tracked
         
         Returns:
-            None: This method doesn't return any value, it just waits for completion.
+            None: This method provides synchronization only, no return value
+            
+        Example:
+            ```python
+            # Add several background tasks
+            for i in range(10):
+                task_manager.add_task(process_item(i))
+            
+            # Wait for all to complete before shutdown
+            await task_manager.wait_for_completion()
+            print("All background tasks completed")
+            ```
             
         Note:
-            If there are no background tasks currently running, this method
-            returns immediately without waiting.
+            This method captures a snapshot of current tasks and waits only for those.
+            Tasks added after this method is called will not be awaited. For complete
+            shutdown, call this method when no new tasks will be added.
+            
+        Logging:
+            Task exceptions are logged at ERROR level with full traceback for
+            debugging purposes, but do not prevent successful completion of the
+            wait operation.
         """
         if not self._background_tasks:
             return

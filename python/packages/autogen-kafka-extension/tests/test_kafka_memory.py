@@ -8,9 +8,10 @@ from testcontainers.core.network import Network
 from testcontainers.core.waiting_utils import wait_for_logs
 from testcontainers.kafka import KafkaContainer
 
+from autogen_kafka_extension import KafkaMemoryConfig
+from autogen_kafka_extension.config import KafkaConfig
 from autogen_kafka_extension.memory.kafka_memory import KafkaMemory
-from autogen_kafka_extension.memory.memory_config import MemoryConfig
-from autogen_kafka_extension.shared.schema_registry_service import SchemaRegistryConfig
+from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryConfig
 
 # Test constants
 TOPIC_NAMES = {
@@ -451,15 +452,15 @@ class TestKafkaSMemory:
         group_suffix: str,
         client_suffix: str,
         name: str = WORKER_TITLE
-    ) -> MemoryConfig:
+    ) -> KafkaMemoryConfig:
         """Helper function to create a MemoryConfig with standard settings."""
-        return MemoryConfig(
+        return KafkaMemoryConfig(
             name=f"{name}_{group_suffix}_{client_suffix}",
-            memory_topic=TOPIC_NAMES["memory"],
             security_protocol=SecurityProtocol.PLAINTEXT,
             security_mechanism=SaslMechanism.PLAIN,
             bootstrap_servers=[connection],
             group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
             client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
-            schema_registry_config = SchemaRegistryConfig(url=sr_connection)
+            schema_registry_config=SchemaRegistryConfig(url=sr_connection),
+            memory_topic=TOPIC_NAMES["memory"],
         )

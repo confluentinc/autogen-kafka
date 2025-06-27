@@ -9,20 +9,18 @@ from kstreams import ConsumerRecord, Stream, Send
 from kstreams.serializers import Serializer
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension.shared.background_task_manager import BackgroundTaskManager
-from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
-from autogen_kafka_extension.shared.streaming_service import StreamingService
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
-from autogen_kafka_extension.shared.kafka_config import KafkaConfig
-from autogen_kafka_extension.shared.streaming_service_config import StreamingServiceConfig
+from ..config.service_base_config import ServiceBaseConfig
+from .background_task_manager import BackgroundTaskManager
+from .events.events_serdes import EventSerializer
+from .streaming_service import StreamingService
+from ..config.kafka_config import KafkaConfig
+from ..config.streaming_config import StreamingServiceConfig
 
 logger = logging.getLogger(__name__)
 
 RecipientType = Union[AgentId, TopicId, str, None]
 
-T = TypeVar("T", bound=KafkaConfig)
-
-class StreamingServiceManager(Generic[T]):
+class StreamingServiceManager:
     """Manages streaming service lifecycle and ownership.
     
     This class provides a wrapper around StreamingService to handle its lifecycle
@@ -42,7 +40,7 @@ class StreamingServiceManager(Generic[T]):
     
     def __init__(self,
                  streaming_service: Optional[StreamingService],
-                 config: T):
+                 config: KafkaConfig):
         """Initialize the streaming service manager.
         
         Args:
@@ -115,6 +113,7 @@ class StreamingServiceManager(Generic[T]):
         await self._service.stop()
         self._is_started = False
 
+T = TypeVar('T', bound=ServiceBaseConfig)
 
 class StreamingWorkerBase(ABC, Generic[T]):
     """Base class for streaming workers with improved separation of concerns.
@@ -155,8 +154,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
         """Initialize the streaming worker base.
         
         Args:
-            config (WorkerConfig): Configuration object containing worker settings
-                such as Kafka broker information, authentication, and other runtime options.
+            config (ServiceBaseConfig): Configuration object containing worker settings.
             topic (str): The primary Kafka topic this worker will subscribe to for
                 incoming messages.
             target_type (type): The type of messages this worker will process.
@@ -172,12 +170,13 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 service to use. If None, a new service will be created internally.
         """
         self._config = config
+        self._kafka_config : KafkaConfig = config.kafka_config
         self._topic = topic
         self._name = name or type(self).__name__
         
         # Initialize components
         self._background_task_manager = BackgroundTaskManager()
-        self._service_manager = StreamingServiceManager(streaming_service, config)
+        self._service_manager = StreamingServiceManager(streaming_service, self._kafka_config)
         self._serialization_registry = serialization_registry or SerializationRegistry()
 
         if monitoring is None:
@@ -339,11 +338,11 @@ class StreamingWorkerBase(ABC, Generic[T]):
         The stream is configured to call `_handle_event` for each incoming message.
         """
         stream_config = StreamingServiceConfig(
-            name=f"{self._config.name}_{self._name}",
+            name=f"{self._kafka_config.name}_{self._name}",
             topic=self._topic,
-            group_id=f"{self._config.group_id}_{self._name}",
-            client_id=f"{self._config.client_id}_{self._name}",
-            auto_offset_reset=self._config.auto_offset_reset,
+            group_id=f"{self._kafka_config.group_id}_{self._name}",
+            client_id=f"{self._kafka_config.client_id}_{self._name}",
+            auto_offset_reset=self._kafka_config.auto_offset_reset,
             target_type=target_type,
         )
 
