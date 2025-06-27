@@ -12,7 +12,7 @@ from .config import (
     SchemaRegistryConfig,
     KafkaAgentConfig,
     KafkaMemoryConfig,
-    KafkaWorkerConfig,
+    KafkaAgentRuntimeConfig,
     StreamingServiceConfig,
     SchemaRegistryService,
     BaseConfig,
@@ -31,7 +31,7 @@ from .shared import (
 # Core components (import after dependencies)
 from .agent import KafkaStreamingAgent
 from .memory import KafkaMemory, KafkaMemoryError, TopicDeletionTimeoutError
-from .runtimes import KafkaWorkerAgentRuntime, MessagingClient
+from .runtimes import KafkaAgentRuntime, MessagingClient
 from .runtimes.services import SubscriptionService
 
 __version__ = "0.1.0"
@@ -42,7 +42,7 @@ __all__ = [
     "KafkaMemory",
     "KafkaMemoryError",
     "TopicDeletionTimeoutError",
-    "KafkaWorkerAgentRuntime",
+    "KafkaAgentRuntime",
     "MessagingClient",
     "SubscriptionService",
 
@@ -50,7 +50,7 @@ __all__ = [
     "SchemaRegistryConfig",
     "KafkaAgentConfig",
     "KafkaMemoryConfig",
-    "KafkaWorkerConfig",
+    "KafkaAgentRuntimeConfig",
     "StreamingServiceConfig",
     "ServiceBaseConfig",
     "BaseConfig",

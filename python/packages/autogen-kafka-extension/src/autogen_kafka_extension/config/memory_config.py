@@ -141,9 +141,9 @@ class KafkaMemoryConfig(ServiceBaseConfig):
             bootstrap_servers = [server.strip() for server in bootstrap_servers.split(',')]
         
         # Create schema registry config
-        schema_registry_data = data.get('schema_registry', {})
+        schema_registry_data = data.get(SchemaRegistryConfig.config_key(), {})
         if not schema_registry_data.get('url'):
-            raise ValueError("'schema_registry.url' is required in configuration")
+            raise ValueError(f"'{SchemaRegistryConfig.config_key()}.url' is required in configuration")
             
         schema_registry_config = SchemaRegistryConfig.from_dict(schema_registry_data)
         
@@ -153,7 +153,7 @@ class KafkaMemoryConfig(ServiceBaseConfig):
         
         # Extract optional parameters with memory-specific defaults
         num_partitions = data.get('num_partitions', 1)  # Memory should have single partition
-        replication_factor = data.get('replication_factor', 1)
+        replication_factor = data.get('replication_factor', 3)
         is_compacted = data.get('is_compacted', False)  # Memory should not be compacted
         auto_offset_reset = data.get('auto_offset_reset', 'earliest')  # Memory should start from beginning
         
@@ -201,4 +201,9 @@ class KafkaMemoryConfig(ServiceBaseConfig):
             is_valid=len(errors) == 0,
             errors=errors,
             warnings=warnings
-        ) 
+        )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Kafka memory."""
+        return 'memory'

@@ -122,7 +122,7 @@ This starts:
 
 ```python
 import asyncio
-from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_core import BaseAgent, MessageContext
 
@@ -136,29 +136,32 @@ config = WorkerConfig(
     response_topic="agent-responses"
 )
 
+
 # Create a simple agent
 class EchoAgent(BaseAgent):
     def __init__(self):
         super().__init__("Echo Agent")
-    
+
     async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
         return f"Echo: {message}"
+
 
 async def main():
     # Create and start the runtime
     runtime = KafkaWorkerAgentRuntime(config)
-    
+
     # Register agent factory
     await runtime.register_factory("echo_agent", EchoAgent)
-    
+
     # Start the runtime
     await runtime.start()
-    
+
     try:
         # Runtime processes messages until stopped
         await asyncio.Event().wait()
     finally:
         await runtime.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -170,7 +173,7 @@ if __name__ == "__main__":
 import asyncio
 from autogen_kafka_extension.agent.kafka_streaming_agent import KafkaStreamingAgent
 from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
-from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_core import BaseAgent, MessageContext, AgentId
 
@@ -187,59 +190,62 @@ runtime_config = WorkerConfig(
 # Configure the Kafka bridge agent to connect to external Kafka service
 kafka_bridge_config = KafkaAgentConfig(
     name="external-service-bridge",
-    group_id="bridge-group", 
+    group_id="bridge-group",
     client_id="bridge-client",
     bootstrap_servers=["localhost:9092"],
-    request_topic="external-service-requests",    # Topic to send requests to external service
-    response_topic="external-service-responses"   # Topic to receive responses from external service
+    request_topic="external-service-requests",  # Topic to send requests to external service
+    response_topic="external-service-responses"  # Topic to receive responses from external service
 )
+
 
 # Example AutoGen agent that will use the Kafka bridge
 class DataProcessor(BaseAgent):
     def __init__(self):
         super().__init__("Data Processor")
-    
+
     async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
         # This agent can now communicate with external Kafka services
         # through the bridge agent as if it were a regular AutoGen agent
-        
+
         # Send request to external service via Kafka bridge
         external_request = {
             "data": message,
             "operation": "process",
             "timestamp": "2024-01-01T00:00:00Z"
         }
-        
+
         # The bridge agent will serialize this message, send it to Kafka,
         # wait for the response, and return it as if it were a direct agent call
         response = await self.send_message(external_request, AgentId("kafka_bridge", "default"))
-        
+
         return f"Processed via external service: {response}"
+
 
 async def main():
     # Create the runtime
     runtime = KafkaWorkerAgentRuntime(runtime_config)
-    
+
     # Register regular AutoGen agents
     await runtime.register_factory("data_processor", DataProcessor)
-    
+
     # Register the Kafka bridge agent - it's treated like any other agent
     kafka_bridge = KafkaStreamingAgent(kafka_bridge_config, "External Service Bridge")
     await runtime.register_agent_instance(kafka_bridge, AgentId("kafka_bridge", "default"))
-    
+
     # Start the runtime
     await runtime.start()
-    
+
     try:
         # Now AutoGen agents can communicate with external Kafka services
         # through the registered bridge agent transparently
         print("Runtime started with Kafka bridge agent registered")
         print(f"Bridge connects to topics: {kafka_bridge_config.request_topic} -> {kafka_bridge_config.response_topic}")
-        
+
         # Runtime processes messages until stopped
         await asyncio.Event().wait()
     finally:
         await runtime.stop()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -382,7 +388,7 @@ Run the test suite:
 
 ```bash
 # Run all tests (as configured in the project)
-PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py tests/test_kafka_memory.py tests/test_kafka_streaming_agent.py -v
+PYTHONPATH=tests:src uv run python -m pytest tests/test_agent_runtime.py tests/test_kafka_memory.py tests/test_kafka_streaming_agent.py -v
 
 # Or using the provided shell script
 ./run_tests.sh
@@ -390,7 +396,7 @@ PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py tests/
 # Run individual test files
 PYTHONPATH=tests:src uv run python -m pytest tests/test_kafka_streaming_agent.py -v
 PYTHONPATH=tests:src uv run python -m pytest tests/test_kafka_memory.py -v
-PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py -v
+PYTHONPATH=tests:src uv run python -m pytest tests/test_agent_runtime.py -v
 
 # Run with coverage
 PYTHONPATH=tests:src uv run python -m pytest tests/ --cov=autogen_kafka_extension -v

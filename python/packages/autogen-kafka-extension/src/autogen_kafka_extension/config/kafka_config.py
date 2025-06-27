@@ -356,9 +356,9 @@ class KafkaConfig(BaseConfig):
             bootstrap_servers = [server.strip() for server in bootstrap_servers.split(',')]
         
         # Create schema registry config
-        schema_registry_data = data.get('schema_registry', {})
+        schema_registry_data = data.get(SchemaRegistryConfig.config_key(), {})
         if not schema_registry_data.get('url'):
-            raise ValueError("'schema_registry.url' is required in configuration")
+            raise ValueError(f"'{SchemaRegistryConfig.config_key()}.url' is required in configuration")
             
         schema_registry_config = SchemaRegistryConfig.from_dict(schema_registry_data)
         
@@ -394,4 +394,9 @@ class KafkaConfig(BaseConfig):
             security_mechanism=security_mechanism,
             sasl_plain_username=sasl_plain_username,
             sasl_plain_password=sasl_plain_password
-        ) 
+        )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Kafka."""
+        return 'kafka'

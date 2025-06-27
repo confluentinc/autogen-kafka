@@ -12,7 +12,7 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
@@ -31,7 +31,7 @@ class MessageProcessor:
         serialization_registry: SerializationRegistry,
         subscription_service: SubscriptionService,
         trace_helper: TraceHelper,
-        config: KafkaWorkerConfig,
+        config: KafkaAgentRuntimeConfig,
     ):
         """Initialize the MessageProcessor with required dependencies.
         

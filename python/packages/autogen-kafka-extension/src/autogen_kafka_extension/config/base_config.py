@@ -5,7 +5,7 @@ and validation logic used across all configuration classes in the extension.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar, Generic, Union, Type, cast
+from typing import Any, Dict, Optional, TypeVar, Union, Type
 from dataclasses import dataclass
 from pathlib import Path
 import threading
@@ -212,6 +212,18 @@ class BaseConfig(ABC):
         )
         
         return cls.from_dict(merged_config)
+
+    @staticmethod
+    def config_key():
+        """Get the configuration key for this class.
+
+        This method can be overridden by subclasses to provide a unique
+        key for identifying the configuration type.
+
+        Returns:
+            A string representing the configuration key.
+        """
+        raise NotImplementedError("Subclasses must implement config_key method.")
 
     def __repr__(self) -> str:
         """Return string representation of the configuration."""

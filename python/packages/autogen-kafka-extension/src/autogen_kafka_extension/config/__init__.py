@@ -10,7 +10,7 @@ from .kafka_config import KafkaConfig
 from .memory_config import KafkaMemoryConfig
 from .schema_registry_config import SchemaRegistryConfig
 from .service_base_config import ServiceBaseConfig
-from .worker_config import KafkaWorkerConfig
+from .agent_runtime_config import KafkaAgentRuntimeConfig
 from .streaming_config import StreamingServiceConfig
 from .config_loader import ConfigLoader
 from .schema_registry_service import SchemaRegistryService
@@ -21,7 +21,7 @@ __all__ = [
     "SchemaRegistryConfig",
     "KafkaAgentConfig",
     "KafkaMemoryConfig",
-    "KafkaWorkerConfig",
+    "KafkaAgentRuntimeConfig",
     "StreamingServiceConfig",
     "KafkaConfig",
     "ConfigLoader",

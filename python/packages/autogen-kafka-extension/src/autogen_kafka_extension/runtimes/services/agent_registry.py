@@ -7,7 +7,7 @@ from autogen_core._telemetry import TraceHelper
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from ...config.worker_config import KafkaWorkerConfig
+from ...config.agent_runtime_config import KafkaAgentRuntimeConfig
 from ...shared.events.events_serdes import EventSerializer
 from ...shared.events.registration_event import RegistrationEvent, RegistrationMessageType
 from ...shared.streaming_service import StreamingService
@@ -16,7 +16,7 @@ from ...shared.streaming_worker_base import StreamingWorkerBase
 logger = logging.getLogger(__name__)
 
 
-class AgentRegistry(StreamingWorkerBase[KafkaWorkerConfig]):
+class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
     """
     A registry for agents that can be used to manage and retrieve agents.
     
@@ -25,7 +25,7 @@ class AgentRegistry(StreamingWorkerBase[KafkaWorkerConfig]):
     """
 
     def __init__(self,
-                 config: KafkaWorkerConfig,
+                 config: KafkaAgentRuntimeConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
@@ -36,7 +36,7 @@ class AgentRegistry(StreamingWorkerBase[KafkaWorkerConfig]):
         for coordinating agent availability across multiple workers.
         
         Args:
-            config (KafkaWorkerConfig): Configuration object containing registry settings
+            config (KafkaAgentRuntimeConfig): Configuration object containing registry settings
                 including the registry topic name and other worker configuration.
             streaming_service (Optional[StreamingService], optional): Service for handling
                 Kafka streaming operations. If None, a default service will be created.

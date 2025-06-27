@@ -75,6 +75,11 @@ class SchemaRegistryConfig(BaseConfig):
             errors=errors,
             warnings=warnings
         )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Schema Registry."""
+        return 'schema_registry'
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SchemaRegistryConfig':

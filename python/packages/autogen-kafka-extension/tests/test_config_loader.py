@@ -60,10 +60,10 @@ class TestConfigLoader:
             expected = {
                 "kafka": {
                     "bootstrap_servers": ["localhost:9092", "localhost:9093"],
-                    "group_id": "test-group"
-                },
-                "schema_registry": {
-                    "url": "http://localhost:8081"
+                    "group_id": "test-group",
+                    "schema_registry": {
+                        "url": "http://localhost:8081"
+                    }
                 },
                 "num_partitions": 5,
                 "is_enabled": True

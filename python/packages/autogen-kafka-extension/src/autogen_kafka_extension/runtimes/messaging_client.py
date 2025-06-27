@@ -11,7 +11,7 @@ from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
@@ -21,7 +21,7 @@ from autogen_kafka_extension.shared.streaming_service import StreamingService
 
 logger = logging.getLogger(__name__)
 
-class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
+class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
     """A Kafka-based messaging client for asynchronous agent communication.
     
     The MessagingClient provides a high-level interface for sending and receiving messages
@@ -67,7 +67,7 @@ class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
     """
 
     def __init__(self,
-                 config: KafkaWorkerConfig,
+                 config: KafkaAgentRuntimeConfig,
                  streaming_service: Optional[StreamingService] = None,
                  monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry(),

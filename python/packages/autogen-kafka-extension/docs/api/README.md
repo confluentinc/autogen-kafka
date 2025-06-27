@@ -218,8 +218,9 @@ sequenceDiagram
 ## 🔧 Configuration Examples
 
 ### Basic Worker Configuration
+
 ```python
-from autogen_kafka_extension import KafkaWorkerConfig, KafkaConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig, KafkaConfig
 
 kafka_config = KafkaConfig(
     bootstrap_servers=["localhost:9092"],
@@ -227,7 +228,7 @@ kafka_config = KafkaConfig(
     schema_registry={"url": "http://localhost:8081"}
 )
 
-worker_config = KafkaWorkerConfig(
+worker_config = KafkaAgentRuntimeConfig(
     kafka_config=kafka_config,
     name="my-worker",
     group_id="agent-group",
