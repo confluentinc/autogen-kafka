@@ -60,10 +60,10 @@ class TestConfigLoader:
             expected = {
                 "kafka": {
                     "bootstrap_servers": ["localhost:9092", "localhost:9093"],
-                    "group_id": "test-group",
-                    "schema_registry": {
-                        "url": "http://localhost:8081"
-                    }
+                    "group_id": "test-group"
+                },
+                "schema_registry": {
+                    "url": "http://localhost:8081"
                 },
                 "num_partitions": 5,
                 "is_enabled": True
@@ -261,8 +261,10 @@ class TestKafkaAgentConfigLoading:
                     "url": "http://localhost:8081"
                 }
             },
-            "request_topic": "custom_requests",
-            "response_topic": "custom_responses"
+            "agent" : {
+                "request_topic": "custom_requests",
+                "response_topic": "custom_responses"
+            }
         }
         
         agent_config = KafkaAgentConfig.from_dict(config_data)

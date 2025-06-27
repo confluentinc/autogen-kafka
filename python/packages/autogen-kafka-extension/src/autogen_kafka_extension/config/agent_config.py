@@ -100,6 +100,11 @@ class KafkaAgentConfig(ServiceBaseConfig):
         if not kafka_data:
             raise ValueError(f"'{KafkaConfig.config_key()}' configuration is required")
 
+        # If schema_registry is at the top level (from environment variables),
+        # move it into the kafka_data
+        if 'schema_registry' in data and 'schema_registry' not in kafka_data:
+            kafka_data['schema_registry'] = data['schema_registry']
+
         kafka_config = KafkaConfig.from_dict(kafka_data)
 
         agent_data = data.get(cls.config_key(), {})

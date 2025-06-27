@@ -3,10 +3,8 @@
 import json
 import os
 import tempfile
-from pathlib import Path
-import pytest
 
-from autogen_kafka_extension.config import KafkaAgentRuntimeConfig, KafkaConfig, SchemaRegistryConfig
+from autogen_kafka_extension.config import KafkaAgentRuntimeConfig
 
 
 class TestKafkaWorkerConfig:
@@ -258,8 +256,8 @@ class TestKafkaWorkerConfigEnvironmentVariableParsing:
         
         env_vars = {
             "TEST_PREFIX_KAFKA_GROUP_ID": "test-group",
-            "TEST_PREFIX_WORKER_REQUEST_TOPIC": "test-requests",
-            "TEST_PREFIX_WORKER_RESPONSE_TOPIC": "test-responses",
+            "TEST_PREFIX_RUNTIME_REQUEST_TOPIC": "test-requests",
+            "TEST_PREFIX_RUNTIME_RESPONSE_TOPIC": "test-responses",
             "TEST_PREFIX_SCHEMA_REGISTRY_URL": "http://localhost:8081",
             "TEST_PREFIX_SOME_FLAT_VALUE": "flat-value"
         }

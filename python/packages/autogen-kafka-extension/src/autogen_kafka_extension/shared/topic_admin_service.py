@@ -94,6 +94,20 @@ class TopicAdminService:
         self._config = config
         self._admin_client = config.get_admin_client()
 
+        future = self._admin_client.describe_cluster()
+        cluster_info = future.result()
+
+        if len(cluster_info.nodes) == 0:
+            logger.error("No Kafka brokers found in cluster")
+            raise Exception("No Kafka brokers found in cluster")
+
+        self._replication_factor = min(self._config.replication_factor, len(cluster_info.nodes))
+        if self._replication_factor < self._config.replication_factor:
+            logger.warning(
+                f"Configured replication factor {self._config.replication_factor} exceeds available brokers "
+                f"({len(cluster_info.nodes)}). Using {self._replication_factor} instead."
+            )
+
     def _create_new_topic(self, topic_name: str) -> NewTopic:
         """Create a NewTopic object with configured partitions and replication factor.
         
@@ -111,10 +125,11 @@ class TopicAdminService:
                      and replication factor from the worker configuration. This object
                      is ready to be used with the Kafka admin client's create_topics method.
         """
+
         return NewTopic(
             topic=topic_name,
             num_partitions=self._config.num_partitions,
-            replication_factor=self._config.replication_factor,
+            replication_factor=self._replication_factor,
             config = {
                 "cleanup.policy": "compact" if self._config.is_compacted else "delete"
             }

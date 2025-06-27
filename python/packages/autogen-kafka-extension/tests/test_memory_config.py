@@ -78,7 +78,7 @@ class TestKafkaMemoryConfig:
         # Test default memory-specific values
         assert memory_config.memory_topic == "memory"
         assert memory_config.kafka_config.num_partitions == 1  # Memory should have single partition
-        assert memory_config.kafka_config.replication_factor == 1
+        assert memory_config.kafka_config.replication_factor == 3
         assert memory_config.kafka_config.is_compacted == False  # Memory should not be compacted
         assert memory_config.kafka_config.auto_offset_reset == "earliest"  # Memory should start from beginning
     
@@ -169,7 +169,7 @@ class TestKafkaMemoryConfig:
             # Test default memory values
             assert memory_config.memory_topic == "memory"
             assert memory_config.kafka_config.num_partitions == 1  # Memory default
-            assert memory_config.kafka_config.replication_factor == 1
+            assert memory_config.kafka_config.replication_factor == 3
             assert memory_config.kafka_config.is_compacted == False  # Memory default
             assert memory_config.kafka_config.auto_offset_reset == "earliest"  # Memory default
             

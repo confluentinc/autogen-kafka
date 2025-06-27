@@ -120,7 +120,7 @@ pytest -m integration  # Integration tests only
 #### Configuration Examples
 ```python
 # Basic worker configuration
-config = KafkaWorkerConfig(
+config = KafkaAgentRuntimeConfig(
     kafka_config=KafkaConfig(bootstrap_servers=["localhost:9092"]),
     name="my-worker",
     group_id="agents",
