@@ -140,7 +140,27 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
-    async def start(self) -> None:
+    async def start_and_wait_for(self, timeout : int = 30):
+        """
+        Start the Kafka stream processing engine and wait for background tasks to start.
+        :param timeout: The timeout in seconds.
+
+        Initializes and starts all internal services in the correct order:
+        1. Subscription service for managing agent subscriptions
+        2. Messaging client for sending/receiving messages
+        3. Agent registry for agent discovery and management
+        4. Underlying streaming service for Kafka connectivity
+        5. Wait for all background tasks to start.
+
+        This method is idempotent - calling it multiple times has no additional effect.
+        """
+        if self.is_started:
+            return
+
+        await self.start()
+        await self.wait_for_streams_to_start(timeout=timeout)
+
+    async def start(self, ) -> None:
         """Start the Kafka stream processing engine and subscribe to topics.
         
         Initializes and starts all internal services in the correct order:

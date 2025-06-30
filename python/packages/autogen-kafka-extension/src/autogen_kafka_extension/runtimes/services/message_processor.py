@@ -12,7 +12,7 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import KafkaAgentRuntimeConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig, KafkaStreamingAgent
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
@@ -201,6 +201,10 @@ class MessageProcessor:
 
         # Get the recipient agent
         rec_agent = await self._agent_manager.get_agent(recipient)
+        if isinstance(rec_agent, KafkaStreamingAgent):
+            await rec_agent.start()
+            await rec_agent.wait_for_streams_to_start()
+
         message_context = MessageContext(
             sender=sender,
             topic_id=None,

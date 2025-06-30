@@ -364,7 +364,7 @@ class KafkaConfig(BaseConfig):
         
         # Extract optional parameters with defaults
         num_partitions = data.get('num_partitions', 3)
-        replication_factor = data.get('replication_factor', 1)
+        replication_factor = data.get('replication_factor', 3)
         is_compacted = data.get('is_compacted', False)
         auto_offset_reset = data.get('auto_offset_reset', 'latest')
         

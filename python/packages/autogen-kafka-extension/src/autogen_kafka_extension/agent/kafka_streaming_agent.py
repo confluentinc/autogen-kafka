@@ -76,6 +76,9 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             schema_registry_service=config.kafka_config.get_schema_registry_service()
         )
 
+        # Start the agent
+        logging.info("KafkaStreamingAgent initialized successfully.")
+
     async def on_message_impl(self, message: Any, ctx: MessageContext) -> Any:
         """Handle incoming messages by serializing and sending them via Kafka.
         

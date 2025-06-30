@@ -80,7 +80,10 @@ class SchemaRegistryService:
         return JSONSerializer(
             schema_registry_client=self.client,
             schema_str=schema_str,
-            to_dict=to_dict or (lambda obj, ctx: obj.__dict__ if hasattr(obj, '__dict__') else obj)
+            to_dict=to_dict or (lambda obj, ctx: obj.__dict__ if hasattr(obj, '__dict__') else obj),
+            conf = {
+                "auto.register.schemas": True,
+            }
         )
 
     def create_json_deserializer(
