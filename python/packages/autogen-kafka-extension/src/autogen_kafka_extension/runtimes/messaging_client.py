@@ -5,7 +5,7 @@ from asyncio import Future
 from typing import Optional, Any, Sequence, Dict
 
 from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
-from autogen_core._serialization import SerializationRegistry, MessageSerializer
+from autogen_core._serialization import SerializationRegistry, MessageSerializer, try_get_known_serializers_for_type
 from autogen_core._telemetry import get_telemetry_grpc_metadata, TraceHelper
 from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Send, Stream
@@ -93,11 +93,11 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         self._cloud_event_serializer = EventSerializer(
             topic = config.publish_topic,
             source_type = CloudEvent,
-            schema_registry_service = self._kafka_config.get_schema_registry_service())
+            kafka_utils=self._kafka_config.utils())
         self._request_serializer = EventSerializer(
             topic = config.request_topic,
             source_type = RequestEvent,
-            schema_registry_service = self._kafka_config.get_schema_registry_service()
+            kafka_utils=self._kafka_config.utils()
         )
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
@@ -267,13 +267,27 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             attributes={"request_id": response.request_id},
             extraAttributes={"message_type": response.payload_type},
         ):
-            result = self._serialization_registry.deserialize(
-                response.payload,
-                type_name=response.payload_type,
-                data_content_type=response.serialization_format,
-            )
-            future = self._pending_requests.pop(response.request_id)
-            if response.error and len(response.error) > 0:
-                future.set_exception(Exception(response.error))
-            else:
-                future.set_result(result)
+            if not self._pending_requests.__contains__(response.request_id):
+                logger.error(f"Received response for unknown request ID: {response.request_id}")
+                return
+
+            try:
+                result = self._serialization_registry.deserialize(
+                    response.payload,
+                    type_name=response.payload_type,
+                    data_content_type=response.serialization_format,
+                )
+            except Exception as e:
+                logger.error(f"Error deserializing response: {e}")
+                future = self._pending_requests.pop(response.request_id)
+                future.set_exception(e)
+                return
+
+            try:
+                future = self._pending_requests.pop(response.request_id)
+                if response.error and len(response.error) > 0:
+                    future.set_exception(Exception(response.error))
+                else:
+                    future.set_result(result)
+            except Exception as e:
+                logger.error(f"Error deserializing response: {e}")

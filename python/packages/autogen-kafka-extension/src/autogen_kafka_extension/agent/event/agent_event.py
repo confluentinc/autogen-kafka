@@ -1,5 +1,4 @@
-import base64
-from typing import Dict
+from typing import Dict, Any
 
 from ...shared.events.event_base import EventBase
 
@@ -12,7 +11,7 @@ class AgentEvent(EventBase):
 
     def __init__(self, id: str,
                  message_type: str,
-                 message: bytes) -> None:
+                 message: Dict[str, Any]) -> None:
         self._id = id
         self._message = message
         self._message_type = message_type
@@ -30,7 +29,7 @@ class AgentEvent(EventBase):
         return self._message_type
 
     @property
-    def message(self) -> bytes:
+    def message(self) -> Dict[str, Any]:
         """
         The message associated with the event.
         This is typically a serialized representation of the event data.
@@ -42,17 +41,14 @@ class AgentEvent(EventBase):
         Convert the event to a dictionary representation.
         This can be useful for serialization or logging.
         """
-        # Base64 encode the message if needed, or keep it as bytes
-        encoded = base64.b64encode(self._message).decode("ascii")
-
         return {
             "id": self._id,
             "message_type": self._message_type,
-            "message":  encoded
+            "message":  self._message
         }
 
     @classmethod
-    def from_dict(cls, data: Dict[str, str]) -> 'AgentEvent':
+    def __from_dict__(cls, data: Dict[str, Any]) -> 'AgentEvent':
         """
         Create an AgentEvent instance from a dictionary representation.
         This is useful for deserialization.
@@ -62,13 +58,8 @@ class AgentEvent(EventBase):
             raise ValueError("Missing required fields in data")
 
         # Decode the message from base64
-        try:
-            message = base64.b64decode(data["message"])
-        except (ValueError, TypeError) as e:
-            raise ValueError(f"Invalid base64 encoding for message: {e}")
-
         return cls(id=data["id"],
-                   message=message,
+                   message=data["message"],
                    message_type=data["message_type"])  # Convert back to bytes
 
     @classmethod
@@ -85,8 +76,10 @@ class AgentEvent(EventBase):
                     "type": "string"
                 },
                 "message": {
-                    "type": "string",
-                    "contentEncoding": "base64"
+                    "type": "object",
+                      "additionalProperties": {
+                        "type": "string"
+                      }
                 }
             },
             "required": ["id", "message_type", "message"]

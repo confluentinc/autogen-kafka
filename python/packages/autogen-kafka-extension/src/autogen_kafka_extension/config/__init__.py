@@ -13,7 +13,7 @@ from .service_base_config import ServiceBaseConfig
 from .agent_runtime_config import KafkaAgentRuntimeConfig
 from .streaming_config import StreamingServiceConfig
 from .config_loader import ConfigLoader
-from .schema_registry_service import SchemaRegistryService
+from .services.kafka_utils import KafkaUtils
 
 __all__ = [
     "ServiceBaseConfig",
@@ -25,6 +25,6 @@ __all__ = [
     "StreamingServiceConfig",
     "KafkaConfig",
     "ConfigLoader",
-    "SchemaRegistryService",
+    "KafkaUtils"
 ]
 

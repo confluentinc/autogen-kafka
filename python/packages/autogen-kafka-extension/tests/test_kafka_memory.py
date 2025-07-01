@@ -9,9 +9,8 @@ from testcontainers.core.waiting_utils import wait_for_logs
 from testcontainers.kafka import KafkaContainer
 
 from autogen_kafka_extension import KafkaMemoryConfig
-from autogen_kafka_extension.config import KafkaConfig
 from autogen_kafka_extension.memory.kafka_memory import KafkaMemory
-from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryConfig
+from autogen_kafka_extension.config.services.schema_registry_service import SchemaRegistryConfig
 
 # Test constants
 TOPIC_NAMES = {

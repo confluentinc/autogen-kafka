@@ -10,9 +10,9 @@ from confluent_kafka.schema_registry._sync.serde import BaseDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 
 from .event_base import EventBase
-from autogen_kafka_extension.config.schema_registry_service import SchemaRegistryService
 from .cloudevent_schema import get_cloudevent_json_schema_compact, \
     cloud_event_to_dict, cloud_event_from_dict
+from ...config import KafkaUtils
 
 
 class EventDeserializer(BaseMiddleware):
@@ -22,12 +22,13 @@ class EventDeserializer(BaseMiddleware):
 
     def __init__(
         self,
-        *,
-        schema_registry_service: SchemaRegistryService,
+        kafka_utils: KafkaUtils,
         target_type: type,
         next_call: types.NextMiddlewareCall,
         send: types.Send,
         stream: "Stream",
+        *,
+        schema_str: Optional[str] = None,
     ) -> None:
         super().__init__(next_call=next_call,
                          send=send,
@@ -35,16 +36,16 @@ class EventDeserializer(BaseMiddleware):
         self._target_type = target_type
 
         if issubclass(target_type, EventBase):
-            schema_str = target_type.__schema__()
+            schema_str = schema_str or target_type.__schema__()
             from_dict = self._dict_to_event_base
         elif target_type is CloudEvent:
-            schema_str = get_cloudevent_json_schema_compact()
+            schema_str = schema_str or get_cloudevent_json_schema_compact()
             from_dict = self._dict_to_cloud_event
         else:
             logging.error(f"Unsupported payload type: {target_type}")
             raise ValueError(f"Unsupported payload type: {target_type}")
 
-        self._inner_deserializer: BaseDeserializer = schema_registry_service.create_json_deserializer(
+        self._inner_deserializer: BaseDeserializer = kafka_utils.create_json_deserializer(
             schema_str=schema_str,
             from_dict=from_dict
         )
@@ -116,25 +117,24 @@ class EventSerializer(Serializer):
     def __init__(self,
                  topic: str,
                  source_type: type,
-                 schema_registry_service: Optional[SchemaRegistryService]):
-
-        if schema_registry_service is None:
-            raise ValueError("schema_registry_service cannot be None")
+                 kafka_utils: KafkaUtils,
+                 *,
+                 schema_str: Optional[str] = None):
 
         if issubclass(source_type, EventBase):
-            schema_str = source_type.__schema__()
+            schema_str = schema_str or source_type.__schema__()
             to_dict = _event_base_to_dict
         elif source_type is CloudEvent:
-            schema_str = get_cloudevent_json_schema_compact()
+            schema_str = schema_str or get_cloudevent_json_schema_compact()
             to_dict = _cloud_event_to_dict
         else:
             logging.error(f"Unsupported payload type: {source_type}")
             raise ValueError(f"Unsupported payload type: {source_type}")
 
-        self._schema_registry_service = schema_registry_service
+        self._kafka_utils = kafka_utils
         self._topic = topic
         self._schema_str = schema_str
-        self._inner_serializer = schema_registry_service.create_json_serializer(
+        self._inner_serializer = kafka_utils.create_json_serializer(
             schema_str=schema_str,
             to_dict=to_dict)
 

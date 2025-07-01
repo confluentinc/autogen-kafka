@@ -4,7 +4,7 @@ from typing import Optional, Callable
 from confluent_kafka.schema_registry import SchemaRegistryClient, SchemaRegistryError
 from confluent_kafka.schema_registry._sync.json_schema import JSONSerializer, JSONDeserializer
 
-from .schema_registry_config import SchemaRegistryConfig
+from autogen_kafka_extension.config.schema_registry_config import SchemaRegistryConfig
 
 logger = logging.getLogger(__name__)
 

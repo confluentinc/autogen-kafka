@@ -60,7 +60,7 @@ class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         self._serializer = EventSerializer(
             topic=config.registry_topic,
             source_type=RegistrationEvent,
-            schema_registry_service=self._kafka_config.get_schema_registry_service()
+            kafka_utils=self._kafka_config.utils()
         )
 
     def _extract_agent_key(self, agent: Union[str, AgentType]) -> str:

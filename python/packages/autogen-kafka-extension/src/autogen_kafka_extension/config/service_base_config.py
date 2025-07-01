@@ -1,4 +1,5 @@
 from abc import ABC
+from typing import Optional
 
 from .base_config import BaseConfig, ValidationResult
 from .auto_validate import auto_validate_after_init

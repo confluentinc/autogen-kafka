@@ -8,11 +8,11 @@ from autogen_core.memory import Memory, UpdateContextResult, MemoryContent, Memo
 from autogen_core.model_context import ChatCompletionContext
 from kstreams import Stream, Send, ConsumerRecord
 
+from ..config.services.kafka_utils import KafkaUtils
 from ..config.memory_config import KafkaMemoryConfig
 from ..shared.events.events_serdes import EventSerializer
 from ..shared.streaming_worker_base import StreamingWorkerBase
 from ..shared.events.memory_event import MemoryEvent
-from ..shared.topic_admin_service import TopicAdminService
 
 logger = logging.getLogger(__name__)
 
@@ -72,11 +72,10 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         self._memory_topic = self._create_topic_name(config.memory_topic, session_id)
         self._memory = memory or ListMemory()
         self._instance_id = str(uuid.uuid4())
-        self._topic_admin: Optional[TopicAdminService] = None
         self._serializer = EventSerializer(
             topic=self._memory_topic,
             source_type=MemoryEvent,
-            schema_registry_service=config.kafka_config.get_schema_registry_service()
+            kafka_utils=self._kafka_config.utils()
         )
 
         # Initialize the streaming worker base with the memory topic
@@ -291,17 +290,6 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         """
         return f"{base_topic}_{session_id}"
 
-    def _get_topic_admin(self) -> TopicAdminService:
-        """
-        Get or create a topic admin service instance.
-        
-        Returns:
-            TopicAdminService: The topic admin service for managing topics.
-        """
-        if self._topic_admin is None:
-            self._topic_admin = TopicAdminService(config=self._kafka_config)
-        return self._topic_admin
-
     async def _ensure_started(self) -> None:
         """
         Ensure the Kafka worker is started before performing memory operations.
@@ -349,14 +337,14 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             KafkaMemoryError: If there's an error managing the topic.
         """
         try:
-            topic_admin = self._get_topic_admin()
-            
-            # Delete the memory topic to clear distributed state
-            topic_admin.delete_topics(topic_names=[self.memory_topic])
+            kafka_utils = self._config.kafka_config.utils()
+
+            # Delete the memory topic to clear the distributed state
+            kafka_utils.delete_topics(topic_names=[self.memory_topic])
             logger.info(f"Initiated deletion of topic {self.memory_topic}")
             
             # Wait for topic deletion to complete with timeout
-            await self._wait_for_topic_deletion(topic_admin)
+            await self._wait_for_topic_deletion(kafka_utils)
             
         except TopicDeletionTimeoutError:
             raise
@@ -364,20 +352,17 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             logger.error(f"Failed to reset memory topic: {e}")
             raise KafkaMemoryError(f"Failed to reset topic: {e}") from e
 
-    async def _wait_for_topic_deletion(self, topic_admin: TopicAdminService) -> None:
+    async def _wait_for_topic_deletion(self, kafka_utils: KafkaUtils) -> None:
         """
         Wait for topic deletion to complete with timeout and retry logic.
-        
-        Args:
-            topic_admin (TopicAdminService): The topic admin service to check topic status.
-            
+
         Raises:
             TopicDeletionTimeoutError: If topic deletion times out.
         """
         retries = 0
         start_time = asyncio.get_event_loop().time()
         
-        while self.memory_topic in topic_admin.list_topics():
+        while self.memory_topic in kafka_utils.list_topics():
             current_time = asyncio.get_event_loop().time()
             
             # Check for overall timeout

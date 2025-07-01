@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import warnings
 from typing import Dict, Any, Awaitable, List, Mapping
@@ -51,7 +52,7 @@ class MessageProcessor:
         self._response_serializer = EventSerializer(
             topic=config.response_topic,
             source_type=ResponseEvent,
-            schema_registry_service=config.kafka_config.get_schema_registry_service()
+            kafka_utils=self._config.kafka_config.utils()
         )
     
     async def process_event(self, event: CloudEvent) -> None:
@@ -238,11 +239,15 @@ class MessageProcessor:
             )
             return
 
-        # Serialize and send the successful response
-        result_type = self._serialization_registry.type_name(result)
-        serialized_result = self._serialization_registry.serialize(
-            result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
-        )
+        if not isinstance(rec_agent, KafkaStreamingAgent):
+            # Serialize and send the successful response
+            result_type = self._serialization_registry.type_name(result)
+            serialized_result = self._serialization_registry.serialize(
+                result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
+            )
+        else:
+            serialized_result = json.dumps(result).encode("utf-8")
+            result_type = rec_agent.response_type.__name__
 
         response_message = ResponseEvent(
             request_id=request.request_id,

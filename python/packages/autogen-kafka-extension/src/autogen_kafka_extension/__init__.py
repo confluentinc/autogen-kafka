@@ -14,17 +14,16 @@ from .config import (
     KafkaMemoryConfig,
     KafkaAgentRuntimeConfig,
     StreamingServiceConfig,
-    SchemaRegistryService,
     BaseConfig,
     KafkaConfig,
     ServiceBaseConfig,
+    KafkaUtils,
 )
 
 # Essential shared utilities
 from .shared import (
     StreamingService,
     StreamingWorkerBase,
-    TopicAdminService,
     BackgroundTaskManager,
 )
 
@@ -59,7 +58,6 @@ __all__ = [
     # Shared utilities
     "StreamingService",
     "StreamingWorkerBase",
-    "TopicAdminService",
     "BackgroundTaskManager",
-    "SchemaRegistryService",
+    "KafkaUtils",
 ]

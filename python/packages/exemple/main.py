@@ -7,12 +7,47 @@ from autogen_core import Agent, AgentId
 from autogen_core._serialization import try_get_known_serializers_for_type
 
 from autogen_kafka_extension import KafkaAgentConfig, KafkaStreamingAgent, KafkaAgentRuntime, KafkaAgentRuntimeConfig
+from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
 
 logger = logging.getLogger(__name__)
 
 @dataclass
-class SentimentRequest:
+class SentimentRequest(KafkaMessageType):
     text: str
+
+    @staticmethod
+    def __schema__() -> str:
+        return """
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "text": {
+                    "type": "string"
+                }
+            },
+            "required": ["text"]
+        }
+        """
+
+@dataclass
+class SentimentResponse(KafkaMessageType):
+    sentiment: str
+
+    @staticmethod
+    def __schema__() -> str:
+        return """
+        {
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "sentiment": {
+                    "type": "string"
+                }
+            },
+            "required": ["sentiment"]
+        }
+        """
 
 class Exemple:
     def __init__(self):
@@ -26,21 +61,23 @@ class Exemple:
         return KafkaStreamingAgent(
             config=self._agent_config,
             description="An example agent for sentiments analysis.",
+            response_type=SentimentResponse,
+            request_type=SentimentRequest,
         )
 
     async def start(self):
         await self._runtime.start_and_wait_for()
 
         self._runtime.add_message_serializer(serializer=try_get_known_serializers_for_type(SentimentRequest))
+        self._runtime.add_message_serializer(serializer=try_get_known_serializers_for_type(SentimentResponse))
         await self._runtime.register_factory("sentiment_agent", lambda: self.new_agent())
-
 
     async def stop(self):
         if self._runtime is not None:
             logger.info("Stopping runtime...")
             await self._runtime.stop()
 
-    async def get_sentiment(self, text: str) -> str:
+    async def get_sentiment(self, text: str) -> SentimentResponse:
         if self._runtime is None:
             raise RuntimeError("Agent is not started. Call start() before using this method.")
 
@@ -67,7 +104,13 @@ async def start():
 
     sentiment = await exemple.get_sentiment("This is a good example.")
 
-    logger.info(f"Sentiment analysis result: {sentiment}")
+    logger.info(f"Sentiment analysis result: {sentiment.sentiment}")
+
+    sentiment = await exemple.get_sentiment("This is a bad example.")
+
+    logger.info(f"Sentiment analysis result: {sentiment.sentiment}")
+
+    await exemple.stop()
 
 async def shutdown(loop):
     logger.info("Shutting down Exemple instance...")

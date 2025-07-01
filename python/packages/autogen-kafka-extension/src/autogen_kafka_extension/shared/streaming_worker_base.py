@@ -152,7 +152,8 @@ class StreamingWorkerBase(ABC, Generic[T]):
         name: Optional[str] = None,
         serialization_registry: Optional[SerializationRegistry] = None,
         monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
-        streaming_service: Optional[StreamingService] = None
+        streaming_service: Optional[StreamingService] = None,
+        schema_str: Optional[str] = None,
     ) -> None:
         """Initialize the streaming worker base.
         
@@ -171,6 +172,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 instance or a TracerProvider. If None, creates a default TraceHelper.
             streaming_service (Optional[StreamingService]): An existing streaming
                 service to use. If None, a new service will be created internally.
+            schema_str (Optional[str]): Optional schema string to use for the message
         """
         self._config = config
         self._kafka_config : KafkaConfig = config.kafka_config
@@ -191,7 +193,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             self._trace_helper = monitoring
 
         # Setup stream
-        self._setup_event_stream(target_type=target_type)
+        self._setup_event_stream(target_type=target_type, schema_str=schema_str)
 
     @property
     def name(self) -> str:
@@ -438,7 +440,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             return recipient
         return str(recipient)
 
-    def _setup_event_stream(self, target_type: type,) -> None:
+    def _setup_event_stream(self, target_type: type, schema_str: Optional[str] = None) -> None:
         """Configure the Kafka stream for subscription events.
         
         Internal method that sets up the Kafka stream using the streaming service.
@@ -457,6 +459,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self._service_manager.service.create_and_add_stream(
             stream_config=stream_config,
             func=self._handle_event,
+            schema_str=schema_str,
         )
         
         logger.debug(f"Stream configured for worker '{self._name}' on topic {stream_config.topic}")

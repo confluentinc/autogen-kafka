@@ -94,7 +94,7 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         self._subscription_serializer = EventSerializer(
             topic=config.subscription_topic,
             source_type=SubscriptionEvent,
-            schema_registry_service=self._kafka_config.get_schema_registry_service()
+            kafka_utils=self._kafka_config.utils()
         )
 
     async def get_local_recipients(self, topic_id: TopicId) -> List[AgentId]:

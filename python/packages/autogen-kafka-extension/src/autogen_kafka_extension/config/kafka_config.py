@@ -7,15 +7,16 @@ capabilities in a consolidated interface.
 
 from typing import Optional
 from aiokafka.helpers import create_ssl_context
-from confluent_kafka.admin import AdminClient
 from kstreams.backends import Kafka
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 from .schema_registry_config import SchemaRegistryConfig
-from .schema_registry_service import SchemaRegistryService
 from .base_config import BaseConfig, ValidationResult
 from .auto_validate import auto_validate_after_init
 from typing import Dict, Any
+
+from .services.kafka_utils import KafkaUtils
+
 
 @auto_validate_after_init
 class KafkaConfig(BaseConfig):
@@ -86,7 +87,7 @@ class KafkaConfig(BaseConfig):
         self._auto_offset_reset = auto_offset_reset
 
         # Lazy initialization for services
-        self._schema_registry_service: Optional[SchemaRegistryService] = None
+        self._utils : Optional[KafkaUtils] = None
 
     @property
     def name(self) -> str:
@@ -96,11 +97,6 @@ class KafkaConfig(BaseConfig):
             The descriptive name of this configuration.
         """
         return self._name
-
-    @property
-    def schema_registry_config(self) -> SchemaRegistryConfig:
-        """Get the schema registry configuration."""
-        return self._schema_registry_config
     
     @property
     def num_partitions(self) -> int:
@@ -156,7 +152,21 @@ class KafkaConfig(BaseConfig):
     def sasl_plain_password(self) -> Optional[str]:
         """Get the SASL password."""
         return self._sasl_plain_password
-    
+
+    def utils(self) -> KafkaUtils:
+        if self._utils is None:
+            self._utils = KafkaUtils(bootstrap_servers=self._bootstrap_servers,
+                                    security_protocol=self._security_protocol,
+                                    security_mechanism=self._security_mechanism,
+                                    sasl_plain_password=self._sasl_plain_password,
+                                    sasl_plain_username=self._sasl_plain_username,
+                                    num_partitions=self._num_partitions,
+                                    replication_factor=self._replication_factor,
+                                    is_compacted=self._is_compacted,
+                                     schema_registry_config=self._schema_registry_config)
+
+        return self._utils
+
     def get_kafka_backend(self) -> Kafka:
         """Create and configure a Kafka backend instance for streaming operations.
         
@@ -179,62 +189,6 @@ class KafkaConfig(BaseConfig):
             ssl_context=create_ssl_context(),
         )
 
-    def get_schema_registry_service(self) -> SchemaRegistryService:
-        """Get the schema registry service instance.
-        
-        This method returns a SchemaRegistryService configured with the
-        schema registry URL and optional authentication credentials. The service
-        is lazily initialized and cached for reuse.
-        
-        Returns:
-            A configured SchemaRegistryService instance.
-        """
-        if self._schema_registry_service is None:
-            self._schema_registry_service = SchemaRegistryService(
-                config=self._schema_registry_config
-            )
-        return self._schema_registry_service
-    
-    def get_admin_client(self) -> AdminClient:
-        """Create and configure a Kafka AdminClient for administrative operations.
-        
-        This method creates a confluent-kafka AdminClient configured with the
-        configuration's connection and security settings. The admin client can be
-        used for topic management, cluster metadata operations, and other
-        administrative tasks.
-        
-        Returns:
-            A configured Kafka AdminClient instance for administrative operations.
-            
-        Note:
-            - Default values are provided for client.id and group.id if not configured
-            - Security settings default to PLAINTEXT and PLAIN if not specified
-            - None values for SASL credentials are handled appropriately
-        """
-        config = {
-            'bootstrap.servers': ','.join(self._bootstrap_servers),
-            'client.id': self._client_id or 'autogen-kafka-extension',
-            'group.id': self._group_id or 'autogen-kafka-extension-group',
-            'security.protocol': (
-                self._security_protocol.value 
-                if self._security_protocol 
-                else SecurityProtocol.PLAINTEXT.value
-            ),
-            'sasl.mechanism': (
-                self._security_mechanism.value 
-                if self._security_mechanism 
-                else SaslMechanism.PLAIN.value
-            ),
-        }
-        
-        # Only add SASL credentials if they are provided
-        if self._sasl_plain_username:
-            config['sasl.username'] = self._sasl_plain_username
-        if self._sasl_plain_password:
-            config['sasl.password'] = self._sasl_plain_password
-        
-        return AdminClient(conf=config)
-    
     def _validate_impl(self) -> ValidationResult:
         """Validate the Kafka configuration parameters."""
         errors = []

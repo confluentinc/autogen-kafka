@@ -1,16 +1,13 @@
-import typing
-
 from kstreams import Stream, middleware, StreamEngine, PrometheusMonitor, Consumer, Producer
 from kstreams.types import StreamFunc
 import asyncio
 import threading
-from typing import Dict, Set
+from typing import Dict, Set, Optional
 import logging
 
 from ..config.kafka_config import KafkaConfig
 from .events.events_serdes import EventDeserializer
 from ..config.streaming_config import StreamingServiceConfig
-from .topic_admin_service import TopicAdminService
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +50,6 @@ class StreamingService(StreamEngine):
     
     Attributes:
         _config (KafkaConfig): Configuration for Kafka connections and settings
-        _topics_admin (TopicAdminService): Service for managing Kafka topics
         _added_streams (Dict[str, TrackableStream]): Dictionary tracking all created streams by name
         _status_lock (threading.Lock): Thread-safe access to stream status tracking
     """
@@ -77,34 +73,15 @@ class StreamingService(StreamEngine):
             producer_class=Producer,
         )
         self._config = config
-        self._topics_admin = TopicAdminService(self._config)
-        
+
         # Stream tracking with custom TrackableStream
         self._added_streams: Dict[str, TrackableStream] = {}
         self._status_lock = threading.Lock()
 
-    def create_topics(self, topics: list[str]) -> None:
-        """
-        Create Kafka topics if they do not already exist.
-        
-        This method uses the TopicAdmin service to create the specified topics
-        with the default configuration. Topics that already exist will be skipped
-        without error.
-        
-        Args:
-            topics (list[str]): List of topic names to create. Each topic name
-                              should be a valid Kafka topic name following Kafka
-                              naming conventions
-                              
-        Raises:
-            KafkaException: If topic creation fails due to Kafka connectivity
-                          or permission issues
-        """
-        self._topics_admin.create_topics(topic_names=topics)
-
     def create_and_add_stream(self,
                               stream_config: StreamingServiceConfig,
-                              func: StreamFunc) -> TrackableStream:
+                              func: StreamFunc,
+                              schema_str: Optional[str] = None) -> TrackableStream:
         """Create a Kafka stream with automatic topic management and deserialization.
         
         This method combines topic creation, stream configuration, and middleware setup
@@ -128,6 +105,7 @@ class StreamingService(StreamEngine):
             func: Stream processing function that handles deserialized messages.
                  Must accept (ConsumerRecord, Stream, Send) parameters and return
                  None or a ConsumerRecord.
+            schema_str: Optional schema string to use for the message
                  
         Returns:
             TrackableStream: The configured and registered Kafka stream instance with
@@ -141,7 +119,7 @@ class StreamingService(StreamEngine):
         Example:
             ```python
             async def process_events(record, stream, send):
-                event = record.value  # Already deserialized by middleware
+                event = record.value # Already deserialized by middleware
                 print(f"Received event: {event}")
             
             config = StreamingServiceConfig(
@@ -162,13 +140,14 @@ class StreamingService(StreamEngine):
 
         # Create topics if requested
         if stream_config.auto_create_topics:
-            self.create_topics([stream_config.topic])
+            self._config.utils().create_topic(stream_config.topic)
 
         # Create and add the stream using our custom TrackableStream
         middleware_type = middleware.Middleware(
             middleware = EventDeserializer,
-            schema_registry_service=self._config.get_schema_registry_service(),
-            target_type= stream_config.target_type)
+            kafka_utils=self._config.utils(),
+            target_type= stream_config.target_type,
+            schema_str=schema_str)
 
         stream = TrackableStream(
             topics=stream_config.topic,
