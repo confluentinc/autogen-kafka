@@ -81,7 +81,7 @@ class StreamingService(StreamEngine):
     def create_and_add_stream(self,
                               stream_config: StreamingServiceConfig,
                               func: StreamFunc,
-                              schema_str: Optional[str] = None) -> TrackableStream:
+                              schema_str: str | None = None) -> TrackableStream:
         """Create a Kafka stream with automatic topic management and deserialization.
         
         This method combines topic creation, stream configuration, and middleware setup

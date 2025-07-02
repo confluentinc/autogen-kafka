@@ -72,8 +72,8 @@ class TestKafkaWorkerConfig:
         worker_config = KafkaAgentRuntimeConfig.from_dict(config_data)
         
         # Test default worker topic names
-        assert worker_config.request_topic == "worker_requests"
-        assert worker_config.response_topic == "worker_responses"
+        assert worker_config.request_topic == "runtime_requests"
+        assert worker_config.response_topic == "runtime_responses"
         assert worker_config.registry_topic == "agent_registry"
         assert worker_config.subscription_topic == "agent_subscriptions"
         assert worker_config.publish_topic == "agent_publishes"
@@ -154,8 +154,8 @@ class TestKafkaWorkerConfig:
             assert worker_config.kafka_config.client_id == "env-worker-client-default"
             
             # Test default worker topics (should use class defaults)
-            assert worker_config.request_topic == "worker_requests"
-            assert worker_config.response_topic == "worker_responses"
+            assert worker_config.request_topic == "runtime_requests"
+            assert worker_config.response_topic == "runtime_responses"
             assert worker_config.registry_topic == "agent_registry"
             assert worker_config.subscription_topic == "agent_subscriptions"
             assert worker_config.publish_topic == "agent_publishes"

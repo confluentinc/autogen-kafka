@@ -85,7 +85,7 @@ class TestKafkaSMemory:
             group_suffix: str,
             client_suffix: str,
             session_id: str = TEST_SESSION_ID,
-            memory: Optional[ListMemory] = None
+            memory: ListMemory | None = None
         ) -> KafkaMemory:
             if memory is None:
                 memory = ListMemory()

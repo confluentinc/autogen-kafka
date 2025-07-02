@@ -79,10 +79,10 @@ class TopicAdminService:
                  num_partitions: int = 3,
                  replication_factor: int = 1,
                  is_compacted: bool = False,
-                 security_protocol: Optional[SecurityProtocol] = None,
-                 security_mechanism: Optional[SaslMechanism] = None,
-                 sasl_plain_username: Optional[str] = None,
-                 sasl_plain_password: Optional[str] = None,
+                 security_protocol: SecurityProtocol | None = None,
+                 security_mechanism: SaslMechanism | None = None,
+                 sasl_plain_username: str | None = None,
+                 sasl_plain_password: str | None = None,
                  ) -> None:
         """Initialize TopicAdmin with worker configuration.
         

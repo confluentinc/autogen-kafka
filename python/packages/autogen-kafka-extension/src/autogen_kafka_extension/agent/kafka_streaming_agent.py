@@ -7,6 +7,7 @@ from typing import Any, Mapping, Dict, cast
 from autogen_core import MessageContext, BaseAgent, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, try_get_known_serializers_for_type
 from kstreams import ConsumerRecord, Stream, Send
+from pydantic import BaseModel
 
 from .kafka_message_type import KafkaMessageType
 from ..config.agent_config import KafkaAgentConfig
@@ -37,8 +38,8 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
     def __init__(self,
                  config: KafkaAgentConfig,
                  description: str,
-                 request_type: type[KafkaMessageType],
-                 response_type: type[KafkaMessageType]) -> None:
+                 request_type: type[KafkaMessageType | BaseModel],
+                 response_type: type[KafkaMessageType | BaseModel]) -> None:
         """Initialize the Kafka streaming agent.
 
         Args:
@@ -54,6 +55,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             logging.error("Response type must be specified")
             raise ValueError("Response type must be specified")
 
+        self._config = config
         self._request_type = request_type
         self._response_type = response_type
 
@@ -65,7 +67,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
                                      config=config,
                                      topic=config.response_topic,
                                      target_type=AgentEvent,
-                                     schema_str = self._get_schema(self._response_type.__schema__()))
+                                     schema_str = self._get_schema(self._response_type))
         
         # Initialize the message serialization registry for handling different message types
         self._serialization_registry = SerializationRegistry()
@@ -91,18 +93,18 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             topic=config.request_topic,
             source_type=AgentEvent,
             kafka_utils=config.kafka_config.utils(),
-            schema_str=self._get_schema(self._request_type.__schema__())
+            schema_str=self._get_schema(self._request_type)
         )
 
         # Start the agent
         logging.info("KafkaStreamingAgent initialized successfully.")
 
     @property
-    def request_type(self) -> type[KafkaMessageType]:
+    def request_type(self) -> type[KafkaMessageType | BaseModel]:
         return self._request_type
 
     @property
-    def response_type(self) -> type[KafkaMessageType]:
+    def response_type(self) -> type[KafkaMessageType | BaseModel]:
         return self._response_type
 
     def on_start(self) -> None:
@@ -230,8 +232,12 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         await self._background_task_manager.wait_for_completion()
 
     @staticmethod
-    def _get_schema(schema_str: str) -> str:
-        message_schema = json.loads(schema_str)
+    def _get_schema(obj_type: type[KafkaMessageType | BaseModel]) -> str:
+        if issubclass(obj_type, BaseModel):
+            message_schema = obj_type.model_json_schema()
+        else:
+            message_schema = json.loads(obj_type.__schema__())
+
         agent_schema : Dict[str, str] = json.loads(AgentEvent.__schema__())
         cast(Dict[str, str], agent_schema["properties"])["message"] = message_schema
         return json.dumps(agent_schema)

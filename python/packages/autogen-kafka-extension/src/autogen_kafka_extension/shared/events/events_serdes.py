@@ -28,7 +28,7 @@ class EventDeserializer(BaseMiddleware):
         send: types.Send,
         stream: "Stream",
         *,
-        schema_str: Optional[str] = None,
+        schema_str: str | None = None,
     ) -> None:
         super().__init__(next_call=next_call,
                          send=send,

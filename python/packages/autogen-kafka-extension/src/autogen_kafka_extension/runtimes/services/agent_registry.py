@@ -26,8 +26,8 @@ class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
 
     def __init__(self,
                  config: KafkaAgentRuntimeConfig,
-                 streaming_service: Optional[StreamingService] = None,
-                 monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
+                 streaming_service: StreamingService | None = None,
+                 monitoring: TraceHelper | TracerProvider | None = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry()) -> None:
         """
         Initialize the AgentRegistry.

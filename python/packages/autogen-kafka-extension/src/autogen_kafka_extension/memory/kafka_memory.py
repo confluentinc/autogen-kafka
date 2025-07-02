@@ -55,7 +55,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
                  config: KafkaMemoryConfig,
                  session_id: str,
                  *,
-                 memory: Optional[Memory] = None) -> None:
+                 memory: Memory | None = None) -> None:
         """
         Initialize a KafkaMemory instance.
         
@@ -75,7 +75,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         self._serializer = EventSerializer(
             topic=self._memory_topic,
             source_type=MemoryEvent,
-            kafka_utils=self._kafka_config.utils()
+            kafka_utils=config.kafka_config.utils()
         )
 
         # Initialize the streaming worker base with the memory topic
@@ -152,7 +152,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
     async def query(
         self,
         query: str | MemoryContent,
-        cancellation_token: Optional[CancellationToken] = None,
+        cancellation_token: CancellationToken | None = None,
         **kwargs: Any,
     ) -> MemoryQueryResult:
         """
@@ -183,7 +183,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             logger.error(f"Failed to query memory: {e}")
             raise KafkaMemoryError(f"Memory query failed: {e}") from e
 
-    async def add(self, content: MemoryContent, cancellation_token: Optional[CancellationToken] = None) -> None:
+    async def add(self, content: MemoryContent, cancellation_token: CancellationToken | None = None) -> None:
         """
         Add content to memory and broadcast the addition to other instances.
         

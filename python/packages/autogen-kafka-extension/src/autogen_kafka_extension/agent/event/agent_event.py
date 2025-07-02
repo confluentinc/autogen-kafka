@@ -12,6 +12,13 @@ class AgentEvent(EventBase):
     def __init__(self, id: str,
                  message_type: str,
                  message: Dict[str, Any]) -> None:
+        if not isinstance(message, dict):
+            raise ValueError("Message must be a dictionary")
+        if not isinstance(message_type, str):
+            raise ValueError("Message type must be a string")
+        if not isinstance(id, str):
+            raise ValueError("ID must be a string")
+
         self._id = id
         self._message = message
         self._message_type = message_type

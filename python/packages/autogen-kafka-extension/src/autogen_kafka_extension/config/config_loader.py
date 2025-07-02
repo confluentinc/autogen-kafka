@@ -234,9 +234,9 @@ class ConfigLoader:
     
     @staticmethod
     def load_config(
-        config_file: Optional[Union[str, Path]] = None,
+        config_file: Union[str, Path] | None = None,
         env_prefix: str = "AUTOGEN_KAFKA",
-        base_config: Optional[Dict[str, Any]] = None
+        base_config: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """Load configuration from multiple sources with priority merging.
         

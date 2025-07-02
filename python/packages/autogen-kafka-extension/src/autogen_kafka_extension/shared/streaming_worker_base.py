@@ -41,7 +41,7 @@ class StreamingServiceManager:
     _service: StreamingService
     
     def __init__(self,
-                 streaming_service: Optional[StreamingService],
+                 streaming_service: StreamingService | None,
                  config: KafkaConfig):
         """Initialize the streaming service manager.
         
@@ -149,11 +149,11 @@ class StreamingWorkerBase(ABC, Generic[T]):
         topic: str,
         target_type: type,
         *,
-        name: Optional[str] = None,
-        serialization_registry: Optional[SerializationRegistry] = None,
-        monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
-        streaming_service: Optional[StreamingService] = None,
-        schema_str: Optional[str] = None,
+        name: str | None = None,
+        serialization_registry: SerializationRegistry | None = None,
+        monitoring: TraceHelper | TracerProvider | None = None,
+        streaming_service: StreamingService | None = None,
+        schema_str: str | None = None,
     ) -> None:
         """Initialize the streaming worker base.
         

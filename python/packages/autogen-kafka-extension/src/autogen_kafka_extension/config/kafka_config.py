@@ -42,10 +42,10 @@ class KafkaConfig(BaseConfig):
         replication_factor: int = 1,
         is_compacted: bool = False,
         auto_offset_reset: str = 'latest',
-        security_protocol: Optional[SecurityProtocol] = None,
-        security_mechanism: Optional[SaslMechanism] = None,
-        sasl_plain_username: Optional[str] = None,
-        sasl_plain_password: Optional[str] = None,
+        security_protocol: SecurityProtocol | None = None,
+        security_mechanism: SaslMechanism | None = None,
+        sasl_plain_username: str | None = None,
+        sasl_plain_password: str | None = None,
     ) -> None:
         """Initialize the Kafka configuration.
         
@@ -87,7 +87,7 @@ class KafkaConfig(BaseConfig):
         self._auto_offset_reset = auto_offset_reset
 
         # Lazy initialization for services
-        self._utils : Optional[KafkaUtils] = None
+        self._utils : KafkaUtils | None = None
 
     @property
     def name(self) -> str:
@@ -97,6 +97,11 @@ class KafkaConfig(BaseConfig):
             The descriptive name of this configuration.
         """
         return self._name
+
+    @property
+    def schema_registry_config(self) -> SchemaRegistryConfig:
+        """Get the schema registry configuration."""
+        return self._schema_registry_config
     
     @property
     def num_partitions(self) -> int:

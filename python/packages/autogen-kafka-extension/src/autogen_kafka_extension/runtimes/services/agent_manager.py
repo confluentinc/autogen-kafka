@@ -1,5 +1,4 @@
 import inspect
-import logging
 import warnings
 from typing import Dict, Callable, Awaitable, cast, TypeVar, Type
 
@@ -71,8 +70,7 @@ class AgentManager:
         if type.type in self._agent_factories:
             raise ValueError(f"Agent with type {type} already exists.")
         if agent_registry.is_registered(type):
-            logging.warning(f"Agent with type {type} is already registered.")
-            return type
+            raise ValueError(f"Agent type {type.type} already registered")
 
         async def factory_wrapper() -> T:
             maybe_agent_instance = agent_factory()
