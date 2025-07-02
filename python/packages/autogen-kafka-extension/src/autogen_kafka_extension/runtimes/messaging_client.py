@@ -2,7 +2,7 @@ import asyncio
 import logging
 import uuid
 from asyncio import Future
-from typing import Optional, Any, Sequence, Dict
+from typing import Any, Sequence, Dict
 
 from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, MessageSerializer, try_get_known_serializers_for_type
