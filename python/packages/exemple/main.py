@@ -51,7 +51,7 @@ class Application:
 
     async def shutdown(self, loop):
         logger.info("Shutting down Exemple instance...")
-        if self.exemple and self.exemple.is_running:
+        if self.exemple and self.exemple.is_running():
             await self.exemple.stop()
         logger.info("Exemple instance stopped successfully.")
 

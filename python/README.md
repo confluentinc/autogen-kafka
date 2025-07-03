@@ -118,7 +118,61 @@ This starts:
 - Schema Registry (localhost:8081)
 - Control Center (localhost:9021)
 
-### 2. Basic Agent Runtime Setup
+### 2. Run the Complete Sample Application
+
+The `packages/exemple/` directory contains a complete sample application that demonstrates both Kafka and GRPC runtime usage:
+
+```bash
+cd packages/exemple
+python main.py
+```
+
+**What the sample demonstrates:**
+- **Runtime Selection**: Choose between Kafka and GRPC at startup
+- **Agent Configuration**: Load configuration from YAML files
+- **Interactive Processing**: Input text for sentiment analysis
+- **Proper Lifecycle**: Handles startup, processing, and shutdown
+- **Error Handling**: Graceful error handling and resource cleanup
+
+**Sample Configuration** (`sample.config.yml`):
+```yaml
+kafka:
+    name: "simple_kafka"
+    bootstrap_servers: "localhost:9092"
+    group_id: "simple_group_abc"
+    client_id: "simple_client_abc"
+    
+agent:
+    request_topic: "simple_request_topic"
+    response_topic: "simple_response_topic"
+    
+runtime:
+    runtime_requests: "runtime_requests"
+    runtime_responses: "runtime_responses"
+    registry_topic: "agent_registry"
+    subscription_topic: "agent_subscription"
+    publish_topic: "publish"
+```
+
+**Sample Application Structure:**
+```
+packages/exemple/
+├── main.py                # Main application entry point
+├── sample.py              # Base Sample class (abstract)
+├── kafka_sample.py        # Kafka runtime implementation
+├── grpcs_sample.py        # GRPC runtime implementation
+├── events.py              # Message type definitions
+└── sample.config.yml      # Configuration file
+```
+
+**Key Features:**
+- **Flexible Runtime**: Switch between Kafka and GRPC without code changes
+- **Type-Safe Messages**: Define request/response types with JSON schema
+- **Configuration Management**: External YAML configuration with validation
+- **Interactive Interface**: Command-line interface for testing
+- **Proper Shutdown**: Graceful shutdown handling with resource cleanup
+
+### 3. Basic Agent Runtime Setup
 
 ```python
 import asyncio
@@ -167,7 +221,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 3. Kafka Bridge Agent Example
+### 4. Kafka Bridge Agent Example
 
 ```python
 import asyncio
@@ -251,7 +305,7 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 4. Distributed Memory Usage
+### 5. Distributed Memory Usage
 
 ```python
 import asyncio
