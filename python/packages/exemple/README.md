@@ -15,16 +15,22 @@ This directory contains a complete sample application demonstrating how to use t
 
 ### Prerequisites
 
-1. **Start Kafka Infrastructure** (if using Kafka runtime):
-   ```bash
-   cd ../../../
-   docker-compose up -d
-   ```
+1. **Confluent Cloud Setup** (for Kafka runtime):
+   - Create a Confluent Cloud account
+   - Set up a Kafka cluster
+   - Create the required topics: `simple_request_topic` and `simple_response_topic`
+   - Set up Schema Registry
+   - Configure API keys and connection details
 
-2. **Install Dependencies**:
+2. **Flink SQL Job** (Remote Agent):
+   - Deploy the Flink SQL job from `flink.sql` to your Flink cluster
+   - The job creates a sentiment analysis model using OpenAI
+   - It processes messages from `simple_request_topic` and sends results to `simple_response_topic`
+
+3. **Install Dependencies**:
    ```bash
    cd python/packages/exemple
-   pip install -r requirements.txt
+   uv sync
    ```
 
 ### Running the Sample
@@ -68,21 +74,22 @@ packages/exemple/
 
 ### Configuration File (`sample.config.yml`)
 
+This example is configured for **Confluent Cloud**. Update the configuration with your Confluent Cloud credentials:
+
 ```yaml
 kafka:
     name: "simple_kafka"
-    bootstrap_servers: "localhost:9092"  # Change for your Kafka cluster
+    bootstrap_servers: "[YOUR_CONFLUENT_CLOUD_BOOTSTRAP_SERVERS]:9092"
     group_id: "simple_group_abc"
     client_id: "simple_client_abc"
-    # Add security settings if needed:
-    # sasl_plain_username: "[USERNAME]"
-    # sasl_plain_password: "[PASSWORD]"
-    # security_protocol: "SASL_SSL"
-    # sasl_mechanism: "PLAIN"
-    # schema_registry:
-    #     url: "[SCHEMA_REGISTRY_URL]"
-    #     api_key: "[API_KEY]"
-    #     api_secret: "[API_SECRET]"
+    sasl_plain_username: "[YOUR_CONFLUENT_CLOUD_API_KEY]"
+    sasl_plain_password: "[YOUR_CONFLUENT_CLOUD_API_SECRET]"
+    security_protocol: "SASL_SSL"
+    sasl_mechanism: "PLAIN"
+    schema_registry:
+        url: "[YOUR_CONFLUENT_CLOUD_SCHEMA_REGISTRY_URL]"
+        api_key: "[YOUR_SCHEMA_REGISTRY_API_KEY]"
+        api_secret: "[YOUR_SCHEMA_REGISTRY_API_SECRET]"
     
 agent:
     request_topic: "simple_request_topic"
@@ -96,27 +103,69 @@ runtime:
     publish_topic: "publish"
 ```
 
-### For Cloud Kafka Services
+### Required Confluent Cloud Setup
 
-Update the configuration for cloud services like Confluent Cloud:
+Before running the example, ensure you have:
 
-```yaml
-kafka:
-    name: "cloud_kafka"
-    bootstrap_servers: "[YOUR_BOOTSTRAP_SERVERS]"
-    group_id: "your_group"
-    client_id: "your_client"
-    sasl_plain_username: "[YOUR_USERNAME]"
-    sasl_plain_password: "[YOUR_PASSWORD]"
-    security_protocol: "SASL_SSL"
-    sasl_mechanism: "PLAIN"
-    schema_registry:
-        url: "[YOUR_SCHEMA_REGISTRY_URL]"
-        api_key: "[YOUR_API_KEY]"
-        api_secret: "[YOUR_API_SECRET]"
-```
+1. **Created the required topics** in your Confluent Cloud cluster:
+   - `simple_request_topic`
+   - `simple_response_topic`
+   - `runtime_requests`
+   - `runtime_responses`
+   - `agent_registry`
+   - `agent_subscription`
+   - `publish`
+
+2. **Schema Registry** enabled and configured with API keys
+
+3. **Flink SQL Job** deployed (see Remote Agent section below)
 
 ## 🏗️ Architecture Overview
+
+This example demonstrates a **distributed sentiment analysis system** using:
+- **AutoGen Kafka Extension** for the client-side agent
+- **Confluent Cloud** for messaging infrastructure
+- **Flink SQL** for the remote sentiment analysis agent
+
+### System Flow
+
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   Python App    │    │ Confluent Cloud │    │   Flink SQL     │
+│ (Local Agent)   │───▶│   Kafka Topics  │───▶│ (Remote Agent)  │
+│                 │    │                 │    │                 │
+│ KafkaStreaming  │    │ request_topic   │    │ ML_PREDICT      │
+│ Agent           │◀───│ response_topic  │◀───│ (OpenAI Model)  │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
+
+### Remote Agent (Flink SQL Job)
+
+The sentiment analysis is performed by a **Flink SQL job** deployed on your Flink cluster:
+
+```sql
+-- Create Model
+CREATE MODEL sentimentmodel
+       INPUT(text STRING)
+       OUTPUT(sentiment STRING) COMMENT 'sentiment analysis model'
+       WITH (
+          'provider' = 'openai',
+          'task' = 'classification',
+          'openai.connection' = 'openai-cli-connection',
+          'openai.system_prompt' = 'You are specialized in sentiment analysis. Your job is to analyze the sentiment of the text and provide the sentiment score. The sentiment score is positive, negative, or neutral.'
+        );
+
+-- Insert the response from the model
+INSERT INTO `simple_response_topic`
+    SELECT s.key, s.id, ROW(p.sentiment) AS message, s.message_type
+    FROM `simple_request_topic` AS s, LATERAL TABLE (ML_PREDICT('sentimentmodel', `message`.`text`)) AS p(sentiment)
+```
+
+**What this Flink job does:**
+1. **Creates a sentiment analysis model** using OpenAI's API
+2. **Listens to `simple_request_topic`** for incoming text analysis requests
+3. **Processes each message** through the [ML_PREDICT function](https://docs.confluent.io/cloud/current/flink/reference/functions/model-inference-functions.html)
+4. **Sends results to `simple_response_topic`** for the client to consume
 
 ### Base Interface (`sample.py`)
 
@@ -136,8 +185,8 @@ class Sample(ABC):
 
 #### Kafka Runtime (`kafka_sample.py`)
 - Uses `KafkaAgentRuntime` for distributed processing
-- Suitable for horizontal scaling
-- Supports multiple instances across different machines
+- Connects to Confluent Cloud
+- Communicates with the remote Flink SQL agent
 
 #### GRPC Runtime (`grpcs_sample.py`)
 - Uses `GrpcWorkerAgentRuntime` for fast local communication
@@ -177,12 +226,12 @@ class SentimentResponse(KafkaMessageType):
 
 2. **Update the agent configuration** in `sample.py`:
    ```python
-   agent = KafkaStreamingAgent(
-       config=self._agent_config,
-       description="Multi-purpose analysis agent",
-       response_type=AnalysisResponse,
-       request_type=AnalysisRequest,
-   )
+       agent = KafkaStreamingAgent(
+        config=self._agent_config,
+        description="Multi-purpose analysis agent",
+        request_type=AnalysisRequest,
+        response_type=AnalysisResponse,
+    )
    ```
 
 3. **Add new methods** to the `Sample` class:
@@ -194,6 +243,31 @@ class SentimentResponse(KafkaMessageType):
        )
        return response
    ```
+
+### Deploying the Flink SQL Job
+
+1. **Access your Flink cluster** (Confluent Cloud or standalone Flink)
+
+2. **Set up OpenAI connection**:
+   ```sql
+   -- Create OpenAI connection (adjust based on your Flink environment)
+   CREATE CONNECTION `openai-cli-connection` AS (
+       'provider' = 'openai',
+       'openai.api_key' = '[YOUR_OPENAI_API_KEY]'
+   );
+   ```
+
+3. **Deploy the sentiment analysis job**:
+   ```bash
+   # Copy the flink.sql content to your Flink SQL client
+   # Or deploy via Flink SQL CLI
+   flink-sql-client --file flink.sql
+   ```
+
+4. **Monitor the job**:
+   - Check that the job is running and processing messages
+   - Monitor the topics for message flow
+   - Verify OpenAI API calls are successful
 
 ### Adding New Runtime Types
 
@@ -275,20 +349,32 @@ This sample application is designed to be educational and extensible. Feel free 
 
 ### Common Issues
 
-1. **Kafka connection failed**:
-   - Ensure Kafka is running: `docker-compose up -d`
-   - Check bootstrap servers in configuration
-   - Verify network connectivity
+1. **Confluent Cloud connection failed**:
+   - Verify your Confluent Cloud API key and secret
+   - Check that your cluster is active and accessible
+   - Ensure the bootstrap servers URL is correct
+   - Verify your Schema Registry credentials
 
-2. **GRPC connection failed**:
-   - Ensure GRPC host is running
-   - Check port availability
-   - Verify firewall settings
+2. **Topic not found errors**:
+   - Ensure all required topics are created in Confluent Cloud
+   - Check topic names match exactly with configuration
+   - Verify topic permissions for your API key
 
-3. **Configuration errors**:
+3. **Flink SQL job issues**:
+   - Ensure OpenAI connection is properly configured
+   - Check that the Flink job is running and processing messages
+   - Verify OpenAI API key has sufficient credits
+   - Monitor Flink job logs for errors
+
+4. **Schema Registry errors**:
+   - Verify Schema Registry is enabled in Confluent Cloud
+   - Check Schema Registry API key and secret
+   - Ensure schemas are compatible with message types
+
+5. **Configuration errors**:
    - Validate YAML syntax
-   - Check all required fields are present
-   - Verify topic names are valid
+   - Check all required fields are present (especially credentials)
+   - Verify topic names are valid Kafka topic names
 
 ### Debug Mode
 
@@ -300,10 +386,28 @@ python main.py
 ```
 
 This will show:
-- Kafka connection details
+- Confluent Cloud connection details
 - Message serialization/deserialization
 - Agent lifecycle events
 - Runtime state changes
+- Schema Registry interactions
+
+### Monitoring the System
+
+1. **Confluent Cloud Console**:
+   - Monitor topic throughput and consumer lag
+   - Check Schema Registry activity
+   - View cluster metrics
+
+2. **Flink Job Monitoring**:
+   - Check job status in Flink dashboard
+   - Monitor message processing rates
+   - View job logs for errors
+
+3. **OpenAI API Usage**:
+   - Monitor API call volume and usage
+   - Check for rate limiting or quota issues
+   - Verify model responses are as expected
 
 ## 📄 License
 

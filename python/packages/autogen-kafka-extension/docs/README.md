@@ -51,7 +51,12 @@ await runtime1.send_message(message, agent_id_on_runtime2)
 #### Pattern 2: Kafka Bridge Agent
 ```python
 # Bridge AutoGen agents with external Kafka services
-bridge = KafkaStreamingAgent(bridge_config, "External API Bridge")
+bridge = KafkaStreamingAgent(
+    config=bridge_config,
+    description="External API Bridge",
+    request_type=RequestType,
+    response_type=ResponseType,
+)
 await bridge.send_message(request, external_service_topic)
 ```
 

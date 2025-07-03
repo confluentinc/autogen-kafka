@@ -96,7 +96,7 @@ The extension provides three main components for distributed agent communication
 A distributed agent runtime that enables agents to communicate across multiple processes and machines through Kafka topics.
 
 ### 2. Streaming Agent (`KafkaStreamingAgent`) 
-A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen agent systems to communicate with external Kafka-based services transparently.
+A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen agent systems to communicate with external Kafka-based services transparently. **Note:** The API now requires explicit `request_type` and `response_type` parameters for type safety.
 
 ### 3. Distributed Memory (`KafkaMemory`)
 A memory implementation that synchronizes state across multiple agent instances using dedicated Kafka topics.
@@ -120,7 +120,10 @@ This starts:
 
 ### 2. Run the Complete Sample Application
 
-The `packages/exemple/` directory contains a complete sample application that demonstrates both Kafka and GRPC runtime usage:
+The `packages/exemple/` directory contains a complete sample application that demonstrates a **distributed sentiment analysis system** using:
+- **AutoGen Kafka Extension** for the client-side agent
+- **Confluent Cloud** for messaging infrastructure  
+- **Flink SQL** for the remote sentiment analysis agent
 
 ```bash
 cd packages/exemple
@@ -129,18 +132,27 @@ python main.py
 
 **What the sample demonstrates:**
 - **Runtime Selection**: Choose between Kafka and GRPC at startup
-- **Agent Configuration**: Load configuration from YAML files
+- **Distributed Processing**: Local agent communicates with remote Flink SQL agent
+- **Cloud Integration**: Uses Confluent Cloud for scalable messaging
+- **AI Integration**: Remote agent uses OpenAI for sentiment analysis
 - **Interactive Processing**: Input text for sentiment analysis
 - **Proper Lifecycle**: Handles startup, processing, and shutdown
-- **Error Handling**: Graceful error handling and resource cleanup
 
 **Sample Configuration** (`sample.config.yml`):
 ```yaml
 kafka:
     name: "simple_kafka"
-    bootstrap_servers: "localhost:9092"
+    bootstrap_servers: "[YOUR_CONFLUENT_CLOUD_BOOTSTRAP_SERVERS]:9092"
     group_id: "simple_group_abc"
     client_id: "simple_client_abc"
+    sasl_plain_username: "[YOUR_CONFLUENT_CLOUD_API_KEY]"
+    sasl_plain_password: "[YOUR_CONFLUENT_CLOUD_API_SECRET]"
+    security_protocol: "SASL_SSL"
+    sasl_mechanism: "PLAIN"
+    schema_registry:
+        url: "[YOUR_CONFLUENT_CLOUD_SCHEMA_REGISTRY_URL]"
+        api_key: "[YOUR_SCHEMA_REGISTRY_API_KEY]"
+        api_secret: "[YOUR_SCHEMA_REGISTRY_API_SECRET]"
     
 agent:
     request_topic: "simple_request_topic"
@@ -162,15 +174,17 @@ packages/exemple/
 ├── kafka_sample.py        # Kafka runtime implementation
 ├── grpcs_sample.py        # GRPC runtime implementation
 ├── events.py              # Message type definitions
-└── sample.config.yml      # Configuration file
+├── sample.config.yml      # Configuration file
+└── flink.sql              # Flink SQL job for remote agent
 ```
 
 **Key Features:**
-- **Flexible Runtime**: Switch between Kafka and GRPC without code changes
+- **Distributed Architecture**: Local client + remote Flink SQL agent
+- **Cloud Native**: Built for Confluent Cloud and Flink
+- **AI-Powered**: Uses OpenAI for sentiment analysis
 - **Type-Safe Messages**: Define request/response types with JSON schema
 - **Configuration Management**: External YAML configuration with validation
 - **Interactive Interface**: Command-line interface for testing
-- **Proper Shutdown**: Graceful shutdown handling with resource cleanup
 
 ### 3. Basic Agent Runtime Setup
 
@@ -283,7 +297,12 @@ async def main():
     await runtime.register_factory("data_processor", DataProcessor)
 
     # Register the Kafka bridge agent - it's treated like any other agent
-    kafka_bridge = KafkaStreamingAgent(kafka_bridge_config, "External Service Bridge")
+    kafka_bridge = KafkaStreamingAgent(
+        config=kafka_bridge_config,
+        description="External Service Bridge",
+        request_type=SentimentRequest,
+        response_type=SentimentResponse,
+    )
     await runtime.register_agent_instance(kafka_bridge, AgentId("kafka_bridge", "default"))
 
     # Start the runtime
@@ -305,7 +324,36 @@ if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 5. Distributed Memory Usage
+### 5. KafkaStreamingAgent API Changes
+
+**Important:** The `KafkaStreamingAgent` constructor now requires explicit type parameters:
+
+```python
+from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
+from dataclasses import dataclass
+from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+
+# Define your message types
+@dataclass
+class MyRequest(KafkaMessageType):
+    text: str
+
+@dataclass
+class MyResponse(KafkaMessageType):
+    result: str
+
+# Create agent with required type parameters
+agent = KafkaStreamingAgent(
+    config=config,
+    description="My agent description",
+    request_type=MyRequest,      # Required
+    response_type=MyResponse,    # Required
+)
+```
+
+**Breaking Change:** The old constructor `KafkaStreamingAgent(config, description)` is no longer supported. Both `request_type` and `response_type` are now required parameters.
+
+### 6. Distributed Memory Usage
 
 ```python
 import asyncio

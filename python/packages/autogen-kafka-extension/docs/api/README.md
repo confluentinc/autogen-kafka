@@ -65,7 +65,12 @@ Bridge component that connects AutoGen agents to Kafka topics, enabling hybrid a
 
 **Usage Pattern:**
 ```python
-agent = KafkaStreamingAgent(config, "Bridge to external service")
+agent = KafkaStreamingAgent(
+    config=config,
+    description="Bridge to external service",
+    request_type=RequestType,
+    response_type=ResponseType,
+)
 await agent.start()
 # Agent processes messages between AutoGen and Kafka
 ```
@@ -296,7 +301,12 @@ def mock_config():
     return Mock(spec=KafkaWorkerConfig)
 
 async def test_agent_message_handling(mock_config):
-    agent = KafkaStreamingAgent(mock_config, "test")
+    agent = KafkaStreamingAgent(
+    config=mock_config,
+    description="test",
+    request_type=RequestType,
+    response_type=ResponseType,
+)
     # Test implementation
 ```
 

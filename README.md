@@ -116,6 +116,7 @@ The `KafkaStreamingAgent` provides a direct Kafka-based communication layer for 
 - **Serialization Support**: Automatic message serialization/deserialization with AutoGen's serialization registry
 - **Background Task Management**: Non-blocking message sending with background task coordination
 - **Configurable Topics**: Separate request and response topics for organized message flow
+- **Type-Safe Messages**: Requires explicit request and response type definitions for compile-time safety
 
 ### Message Patterns
 
@@ -155,7 +156,14 @@ The extension provides a Kafka-based memory implementation (`KafkaMemory`) that 
 
 ### 1. Infrastructure Setup
 
-Start a local Kafka cluster for development:
+**For the included sample application**, set up Confluent Cloud:
+
+1. **Create a Confluent Cloud account** and Kafka cluster
+2. **Set up Schema Registry** with API keys
+3. **Create required topics** in your cluster
+4. **Deploy the Flink SQL job** for the remote sentiment analysis agent
+
+**For local development**, start a local Kafka cluster:
 
 ```bash
 # Using the provided Docker Compose
@@ -194,16 +202,17 @@ The project includes complete sample applications in `python/packages/exemple/` 
 #### Quick Start with Sample Application
 
 ```python
-# Run the interactive sample application
+# Run the interactive distributed sentiment analysis sample
 cd python/packages/exemple
 python main.py
 ```
 
-The sample application provides:
-- **Runtime Selection**: Choose between Kafka and GRPC at startup
+The sample application demonstrates a **distributed sentiment analysis system**:
+- **Local Agent**: Python application using AutoGen Kafka Extension
+- **Remote Agent**: Flink SQL job with OpenAI integration
+- **Cloud Infrastructure**: Confluent Cloud for messaging
 - **Interactive Interface**: Input text for sentiment analysis
-- **Proper Lifecycle Management**: Handles startup, processing, and shutdown
-- **Configuration Management**: External YAML configuration
+- **Runtime Selection**: Choose between Kafka and GRPC at startup
 
 #### Creating Your Own Agent Application
 
@@ -261,8 +270,8 @@ class AgentBase(ABC):
         agent = KafkaStreamingAgent(
             config=self._agent_config,
             description="My custom agent",
-            response_type=SentimentResponse,
             request_type=SentimentRequest,
+            response_type=SentimentResponse,
         )
         await agent.start()
         await agent.wait_for_streams_to_start()

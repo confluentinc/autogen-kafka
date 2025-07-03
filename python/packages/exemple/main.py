@@ -33,8 +33,6 @@ class Application:
         await self.exemple.start()
         logger.info("Exemple instance started successfully.")
 
-
-
         text: str = ""
         while text != "exit":
             text = input("Please specify a text to analyze or type 'exit' to quit the application:")
