@@ -49,7 +49,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             response_type: Response message type, a subclass of KafkaMessageType
         """
         if request_type is None:
-            logging.error("Reqeust type must be specified")
+            logging.error("Request type must be specified")
             raise ValueError("Request type must be specified")
         if response_type is None:
             logging.error("Response type must be specified")
