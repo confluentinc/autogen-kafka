@@ -1,18 +1,18 @@
 from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Stream, Send
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 
 
-class CloudEventProcessor(StreamingWorkerBase[KafkaWorkerConfig]):
+class CloudEventProcessor(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
     """
     A class to process cloud events.
     """
 
     def __init__(self,
-                 config: KafkaWorkerConfig,
+                 config: KafkaAgentRuntimeConfig,
                  message_processor: MessageProcessor):
         super().__init__(config=config,
                          target_type=CloudEvent,

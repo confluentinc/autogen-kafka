@@ -3,10 +3,8 @@
 import json
 import os
 import tempfile
-from pathlib import Path
-import pytest
 
-from autogen_kafka_extension.config import KafkaWorkerConfig, KafkaConfig, SchemaRegistryConfig
+from autogen_kafka_extension.config import KafkaAgentRuntimeConfig
 
 
 class TestKafkaWorkerConfig:
@@ -29,7 +27,7 @@ class TestKafkaWorkerConfig:
                 "replication_factor": 2,
                 "is_compacted": True
             },
-            "worker": {
+            "runtime": {
                 "request_topic": "custom_worker_requests",
                 "response_topic": "custom_worker_responses",
                 "registry_topic": "custom_agent_registry",
@@ -38,7 +36,7 @@ class TestKafkaWorkerConfig:
             }
         }
         
-        worker_config = KafkaWorkerConfig.from_dict(config_data)
+        worker_config = KafkaAgentRuntimeConfig.from_dict(config_data)
         
         # Test kafka config properties
         assert worker_config.kafka_config.name == "test-worker-kafka"
@@ -71,11 +69,11 @@ class TestKafkaWorkerConfig:
             # No worker section - should use defaults
         }
         
-        worker_config = KafkaWorkerConfig.from_dict(config_data)
+        worker_config = KafkaAgentRuntimeConfig.from_dict(config_data)
         
         # Test default worker topic names
-        assert worker_config.request_topic == "worker_requests"
-        assert worker_config.response_topic == "worker_responses"
+        assert worker_config.request_topic == "runtime_requests"
+        assert worker_config.response_topic == "runtime_responses"
         assert worker_config.registry_topic == "agent_registry"
         assert worker_config.subscription_topic == "agent_subscriptions"
         assert worker_config.publish_topic == "agent_publishes"
@@ -92,11 +90,11 @@ class TestKafkaWorkerConfig:
             "AUTOGEN_KAFKA_KAFKA_NUM_PARTITIONS": "4",
             
             # Worker-specific configuration
-            "AUTOGEN_KAFKA_WORKER_REQUEST_TOPIC": "env_worker_requests",
-            "AUTOGEN_KAFKA_WORKER_RESPONSE_TOPIC": "env_worker_responses",
-            "AUTOGEN_KAFKA_WORKER_REGISTRY_TOPIC": "env_agent_registry",
-            "AUTOGEN_KAFKA_WORKER_SUBSCRIPTION_TOPIC": "env_agent_subscriptions",
-            "AUTOGEN_KAFKA_WORKER_PUBLISH_TOPIC": "env_agent_publishes"
+            "AUTOGEN_KAFKA_RUNTIME_REQUEST_TOPIC": "env_worker_requests",
+            "AUTOGEN_KAFKA_RUNTIME_RESPONSE_TOPIC": "env_worker_responses",
+            "AUTOGEN_KAFKA_RUNTIME_REGISTRY_TOPIC": "env_agent_registry",
+            "AUTOGEN_KAFKA_RUNTIME_SUBSCRIPTION_TOPIC": "env_agent_subscriptions",
+            "AUTOGEN_KAFKA_RUNTIME_PUBLISH_TOPIC": "env_agent_publishes"
         }
         
         # Store original values
@@ -106,7 +104,7 @@ class TestKafkaWorkerConfig:
             os.environ[key] = value
         
         try:
-            worker_config = KafkaWorkerConfig.from_env()
+            worker_config = KafkaAgentRuntimeConfig.from_env()
             
             # Test kafka config properties
             assert worker_config.kafka_config.name == "env-worker-kafka"
@@ -148,7 +146,7 @@ class TestKafkaWorkerConfig:
             os.environ[key] = value
         
         try:
-            worker_config = KafkaWorkerConfig.from_env()
+            worker_config = KafkaAgentRuntimeConfig.from_env()
             
             # Test kafka config properties
             assert worker_config.kafka_config.name == "env-worker-kafka-default"
@@ -156,8 +154,8 @@ class TestKafkaWorkerConfig:
             assert worker_config.kafka_config.client_id == "env-worker-client-default"
             
             # Test default worker topics (should use class defaults)
-            assert worker_config.request_topic == "worker_requests"
-            assert worker_config.response_topic == "worker_responses"
+            assert worker_config.request_topic == "runtime_requests"
+            assert worker_config.response_topic == "runtime_responses"
             assert worker_config.registry_topic == "agent_registry"
             assert worker_config.subscription_topic == "agent_subscriptions"
             assert worker_config.publish_topic == "agent_publishes"
@@ -182,7 +180,7 @@ class TestKafkaWorkerConfig:
                     "url": "http://localhost:8081"
                 }
             },
-            "worker": {
+            "runtime": {
                 "request_topic": "file_worker_requests",
                 "response_topic": "file_worker_responses",
                 "registry_topic": "file_agent_registry"
@@ -194,7 +192,7 @@ class TestKafkaWorkerConfig:
             config_file = f.name
         
         try:
-            worker_config = KafkaWorkerConfig.from_file(config_file)
+            worker_config = KafkaAgentRuntimeConfig.from_file(config_file)
             
             # Test kafka config properties
             assert worker_config.kafka_config.name == "file-worker-kafka"
@@ -225,7 +223,7 @@ class TestKafkaWorkerConfig:
                     "url": "http://localhost:8081"
                 }
             },
-            "worker": {
+            "runtime": {
                 "request_topic": "test_requests",
                 "response_topic": "test_responses",
                 "registry_topic": "test_registry",
@@ -234,7 +232,7 @@ class TestKafkaWorkerConfig:
             }
         }
         
-        worker_config = KafkaWorkerConfig.from_dict(config_data)
+        worker_config = KafkaAgentRuntimeConfig.from_dict(config_data)
         all_topics = worker_config.get_all_topics()
         
         expected_topics = [
@@ -258,8 +256,8 @@ class TestKafkaWorkerConfigEnvironmentVariableParsing:
         
         env_vars = {
             "TEST_PREFIX_KAFKA_GROUP_ID": "test-group",
-            "TEST_PREFIX_WORKER_REQUEST_TOPIC": "test-requests",
-            "TEST_PREFIX_WORKER_RESPONSE_TOPIC": "test-responses",
+            "TEST_PREFIX_RUNTIME_REQUEST_TOPIC": "test-requests",
+            "TEST_PREFIX_RUNTIME_RESPONSE_TOPIC": "test-responses",
             "TEST_PREFIX_SCHEMA_REGISTRY_URL": "http://localhost:8081",
             "TEST_PREFIX_SOME_FLAT_VALUE": "flat-value"
         }
@@ -277,7 +275,7 @@ class TestKafkaWorkerConfigEnvironmentVariableParsing:
                 "kafka": {
                     "group_id": "test-group"
                 },
-                "worker": {
+                "runtime": {
                     "request_topic": "test-requests",
                     "response_topic": "test-responses"
                 },

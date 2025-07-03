@@ -38,8 +38,10 @@ class StreamingServiceManager:
         _is_started (bool): Current state of the streaming service.
     """
     
+    _service: StreamingService
+    
     def __init__(self,
-                 streaming_service: Optional[StreamingService],
+                 streaming_service: StreamingService | None,
                  config: KafkaConfig):
         """Initialize the streaming service manager.
         
@@ -48,13 +50,14 @@ class StreamingServiceManager:
                 to manage. If None, a new service will be created internally.
             config (WorkerConfig): Configuration object containing worker settings.
         """
-        self._service = streaming_service
         self._config = config
         self._owns_service = streaming_service is None
         self._is_started = False
         
-        if self._service is None:
+        if streaming_service is None:
             self._service = StreamingService(config)
+        else:
+            self._service = streaming_service
     
     @property
     def service(self) -> StreamingService:
@@ -146,10 +149,11 @@ class StreamingWorkerBase(ABC, Generic[T]):
         topic: str,
         target_type: type,
         *,
-        name: Optional[str] = None,
-        serialization_registry: Optional[SerializationRegistry] = None,
-        monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
-        streaming_service: Optional[StreamingService] = None
+        name: str | None = None,
+        serialization_registry: SerializationRegistry | None = None,
+        monitoring: TraceHelper | TracerProvider | None = None,
+        streaming_service: StreamingService | None = None,
+        schema_str: str | None = None,
     ) -> None:
         """Initialize the streaming worker base.
         
@@ -168,6 +172,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 instance or a TracerProvider. If None, creates a default TraceHelper.
             streaming_service (Optional[StreamingService]): An existing streaming
                 service to use. If None, a new service will be created internally.
+            schema_str (Optional[str]): Optional schema string to use for the message
         """
         self._config = config
         self._kafka_config : KafkaConfig = config.kafka_config
@@ -188,7 +193,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             self._trace_helper = monitoring
 
         # Setup stream
-        self._setup_event_stream(target_type=target_type)
+        self._setup_event_stream(target_type=target_type, schema_str=schema_str)
 
     @property
     def name(self) -> str:
@@ -215,10 +220,12 @@ class StreamingWorkerBase(ABC, Generic[T]):
         Initializes and starts all necessary components for message processing.
         This includes starting the underlying streaming service and setting up
         the message processing pipeline.
-        
+
         Raises:
             RuntimeError: If the worker fails to start or is already started.
         """
+        logger.info(f"Starting worker '{self._name}'")
+
         if self.is_started:
             logger.warning(f"Worker '{self._name}' is already started")
             return
@@ -253,6 +260,109 @@ class StreamingWorkerBase(ABC, Generic[T]):
         except Exception as e:
             logger.error(f"Failed to stop worker '{self._name}': {e}")
             raise RuntimeError(f"Failed to stop worker: {e}") from e
+
+    async def wait_for_streams_to_start(self, timeout: float = 30.0, check_interval: float = 0.1) -> bool:
+        """Wait until all stream consumers managed by this worker are running.
+        
+        This method delegates to the underlying streaming service to wait for all
+        registered stream consumers to start and be actively polling for messages.
+        A stream is considered running when its underlying Kafka consumer has started
+        and is ready to process messages, regardless of whether it has processed any
+        messages yet.
+        
+        Args:
+            timeout (float): Maximum time to wait in seconds. Defaults to 30.0 seconds.
+            check_interval (float): Time between status checks in seconds. Defaults to 0.1 seconds.
+            
+        Returns:
+            bool: True if all stream consumers are running within the timeout, False if timeout occurred.
+            
+        Raises:
+            ValueError: If timeout or check_interval are invalid values.
+            RuntimeError: If the worker is not started.
+            
+        Example:
+            ```python
+            # Start the worker
+            await worker.start()
+            
+            # Wait for all stream consumers to start
+            if await worker.wait_for_streams_to_start():
+                print("All stream consumers are running!")
+            else:
+                print("Timeout: Not all stream consumers started")
+            ```
+        """
+        await self._ensure_started()
+        return await self._service_manager.service.wait_for_streams_to_start(timeout, check_interval)
+
+    def get_stream_names(self) -> set[str]:
+        """Get the names of all streams managed by this worker.
+        
+        Returns:
+            set[str]: Set of stream names that have been registered with this worker.
+            
+        Raises:
+            RuntimeError: If the worker is not started.
+        """
+        if not self.is_started:
+            raise RuntimeError(f"Worker '{self._name}' is not started")
+        return self._service_manager.service.get_stream_names()
+
+    def is_stream_running(self, stream_name: str) -> bool:
+        """Check if a specific stream consumer managed by this worker is currently running.
+        
+        A stream is considered running when its underlying Kafka consumer has started
+        and is actively polling for messages, regardless of whether it has processed
+        any messages yet.
+        
+        Args:
+            stream_name (str): The name of the stream to check.
+            
+        Returns:
+            bool: True if the stream consumer is running, False otherwise.
+            
+        Raises:
+            KeyError: If no stream with the given name exists.
+            RuntimeError: If the worker is not started.
+        """
+        if not self.is_started:
+            raise RuntimeError(f"Worker '{self._name}' is not started")
+        return self._service_manager.service.is_stream_running(stream_name)
+
+    def are_all_streams_running(self) -> bool:
+        """Check if all stream consumers managed by this worker are currently running.
+        
+        A stream is considered running when its underlying Kafka consumer has started
+        and is actively polling for messages, regardless of whether it has processed
+        any messages yet.
+        
+        Returns:
+            bool: True if all stream consumers are running, False if any consumer is not 
+                  running or if no streams are registered.
+                  
+        Raises:
+            RuntimeError: If the worker is not started.
+        """
+        if not self.is_started:
+            raise RuntimeError(f"Worker '{self._name}' is not started")
+        return self._service_manager.service.are_all_streams_running()
+
+    def get_stream_status(self) -> dict[str, bool]:
+        """Get the running status of all stream consumers managed by this worker.
+        
+        Returns the current status of each stream consumer, where True indicates the
+        consumer is running and actively polling for messages.
+        
+        Returns:
+            dict[str, bool]: Dictionary mapping stream names to their consumer running status.
+            
+        Raises:
+            RuntimeError: If the worker is not started.
+        """
+        if not self.is_started:
+            raise RuntimeError(f"Worker '{self._name}' is not started")
+        return self._service_manager.service.get_stream_status()
 
     async def send_message(
         self,
@@ -330,7 +440,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
             return recipient
         return str(recipient)
 
-    def _setup_event_stream(self, target_type: type,) -> None:
+    def _setup_event_stream(self, target_type: type, schema_str: Optional[str] = None) -> None:
         """Configure the Kafka stream for subscription events.
         
         Internal method that sets up the Kafka stream using the streaming service.
@@ -349,6 +459,7 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self._service_manager.service.create_and_add_stream(
             stream_config=stream_config,
             func=self._handle_event,
+            schema_str=schema_str,
         )
         
         logger.debug(f"Stream configured for worker '{self._name}' on topic {stream_config.topic}")

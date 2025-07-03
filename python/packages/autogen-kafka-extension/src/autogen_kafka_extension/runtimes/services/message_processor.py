@@ -12,7 +12,7 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
@@ -31,7 +31,7 @@ class MessageProcessor:
         serialization_registry: SerializationRegistry,
         subscription_service: SubscriptionService,
         trace_helper: TraceHelper,
-        config: KafkaWorkerConfig,
+        config: KafkaAgentRuntimeConfig,
     ):
         """Initialize the MessageProcessor with required dependencies.
         
@@ -51,7 +51,7 @@ class MessageProcessor:
         self._response_serializer = EventSerializer(
             topic=config.response_topic,
             source_type=ResponseEvent,
-            schema_registry_service=config.kafka_config.get_schema_registry_service()
+            kafka_utils=self._config.kafka_config.utils()
         )
     
     async def process_event(self, event: CloudEvent) -> None:
@@ -139,10 +139,10 @@ class MessageProcessor:
                     logger.error("Error processing event", exc_info=res)
         except BaseException as e:
             logger.error("Error handling event", exc_info=e)
-    
+
     async def process_request(self, request: RequestEvent, send: Send) -> None:
         """Process an incoming request message, invoke the agent, and send a response.
-        
+
         This method handles direct agent-to-agent RPC requests by:
         1. Deserializing the request payload using the serialization registry
         2. Retrieving the target agent instance from the agent manager
@@ -150,10 +150,10 @@ class MessageProcessor:
         4. Invoking the agent's message handler with distributed tracing
         5. Serializing and sending the response back to the requester
         6. Handling errors by sending error responses with telemetry data
-        
+
         The method ensures that even if agent processing fails, a response is always
         sent back to prevent the requester from waiting indefinitely.
-        
+
         Args:
             request: The request event containing:
                     - recipient: Target agent ID
@@ -165,15 +165,15 @@ class MessageProcessor:
                     - metadata: Tracing and telemetry metadata
             send: Kafka producer function for sending response messages back to
                  the response topic. Must be async callable.
-                 
+
         Returns:
             None: This method doesn't return a value but sends responses via Kafka
-            
+
         Raises:
             Exception: Any exception during message processing is caught and converted
                       to an error response. The original exception is logged but not
                       re-raised to prevent disrupting the message processing loop.
-        
+
         Example:
             ```python
             request = RequestEvent(
@@ -185,6 +185,28 @@ class MessageProcessor:
             await processor.process_request(request, kafka_send_func)
             ```
         """
+        try:
+            return await self._process_request(request, send)
+        except Exception as e:
+            logger.error(f"Error processing request: {e}")
+            # Send an error response if agent processing fails
+            response_message = ResponseEvent(
+                request_id=request.request_id,
+                error=str(e),
+                metadata=get_telemetry_grpc_metadata()
+            )
+            try:
+                await send(
+                    topic=self._config.response_topic,
+                    value=response_message,
+                    key=request.recipient,
+                    serializer=self._response_serializer
+                )
+            except Exception as e:
+                logger.error(f"Failed to send response message: {e}")
+
+    async def _process_request(self, request: RequestEvent, send: Send) -> None:
+
         recipient = request.recipient
         sender = request.agent_id
         if sender is None:
@@ -201,6 +223,7 @@ class MessageProcessor:
 
         # Get the recipient agent
         rec_agent = await self._agent_manager.get_agent(recipient)
+
         message_context = MessageContext(
             sender=sender,
             topic_id=None,
@@ -209,32 +232,16 @@ class MessageProcessor:
             message_id=request.request_id,
         )
 
-        try:
-            with MessageHandlerContext.populate_context(rec_agent.id):
-                with self._trace_helper.trace_block(
-                    "process",
-                    rec_agent.id,
-                    parent=request.metadata,
-                    attributes={"request_id": request.request_id},
-                    extraAttributes={"message_type": request.payload_type},
-                ):
-                    result = await rec_agent.on_message(message, ctx=message_context)
-        except BaseException as e:
-            # Send an error response if agent processing fails
-            response_message = ResponseEvent(
-                request_id=request.request_id,
-                error=str(e),
-                metadata=get_telemetry_grpc_metadata()
-            )
-            await send(
-                topic=self._config.response_topic,
-                value=response_message,
-                key=recipient,
-                serializer=self._response_serializer
-            )
-            return
+        with MessageHandlerContext.populate_context(rec_agent.id):
+            with self._trace_helper.trace_block(
+                "process",
+                rec_agent.id,
+                parent=request.metadata,
+                attributes={"request_id": request.request_id},
+                extraAttributes={"message_type": request.payload_type},
+            ):
+                result = await rec_agent.on_message(message, ctx=message_context)
 
-        # Serialize and send the successful response
         result_type = self._serialization_registry.type_name(result)
         serialized_result = self._serialization_registry.serialize(
             result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
@@ -249,14 +256,10 @@ class MessageProcessor:
             recipient=sender,
             metadata=get_telemetry_grpc_metadata(),
         )
-        try:
-            await send(
-                topic=self._config.response_topic,
-                value=response_message,
-                key=recipient.__str__(),
-                serializer=self._response_serializer,
-                headers={}
-            )
-        except Exception as e:
-            logger.error(f"Failed to send response message: {e}")
-            raise RuntimeError(f"Failed to send response: {e}") from e
+        await send(
+            topic=self._config.response_topic,
+            value=response_message,
+            key=recipient.__str__(),
+            serializer=self._response_serializer,
+            headers={}
+        )

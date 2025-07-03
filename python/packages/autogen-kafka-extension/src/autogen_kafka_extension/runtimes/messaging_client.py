@@ -2,16 +2,16 @@ import asyncio
 import logging
 import uuid
 from asyncio import Future
-from typing import Optional, Any, Sequence, Dict
+from typing import Any, Sequence, Dict
 
 from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
-from autogen_core._serialization import SerializationRegistry, MessageSerializer
+from autogen_core._serialization import SerializationRegistry, MessageSerializer, try_get_known_serializers_for_type
 from autogen_core._telemetry import get_telemetry_grpc_metadata, TraceHelper
 from azure.core.messaging import CloudEvent
 from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
@@ -21,7 +21,7 @@ from autogen_kafka_extension.shared.streaming_service import StreamingService
 
 logger = logging.getLogger(__name__)
 
-class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
+class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
     """A Kafka-based messaging client for asynchronous agent communication.
     
     The MessagingClient provides a high-level interface for sending and receiving messages
@@ -67,9 +67,9 @@ class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
     """
 
     def __init__(self,
-                 config: KafkaWorkerConfig,
-                 streaming_service: Optional[StreamingService] = None,
-                 monitoring: Optional[TraceHelper] | Optional[TracerProvider] = None,
+                 config: KafkaAgentRuntimeConfig,
+                 streaming_service: StreamingService | None = None,
+                 monitoring: TraceHelper | TracerProvider | None = None,
                  serialization_registry: SerializationRegistry = SerializationRegistry(),
                  ) -> None:
         """Initialize the MessagingClient for sending and receiving messages via Kafka.
@@ -93,11 +93,11 @@ class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
         self._cloud_event_serializer = EventSerializer(
             topic = config.publish_topic,
             source_type = CloudEvent,
-            schema_registry_service = self._kafka_config.get_schema_registry_service())
+            kafka_utils=self._kafka_config.utils())
         self._request_serializer = EventSerializer(
             topic = config.request_topic,
             source_type = RequestEvent,
-            schema_registry_service = self._kafka_config.get_schema_registry_service()
+            kafka_utils=self._kafka_config.utils()
         )
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
@@ -267,13 +267,27 @@ class MessagingClient(StreamingWorkerBase[KafkaWorkerConfig]):
             attributes={"request_id": response.request_id},
             extraAttributes={"message_type": response.payload_type},
         ):
-            result = self._serialization_registry.deserialize(
-                response.payload,
-                type_name=response.payload_type,
-                data_content_type=response.serialization_format,
-            )
-            future = self._pending_requests.pop(response.request_id)
-            if response.error and len(response.error) > 0:
-                future.set_exception(Exception(response.error))
-            else:
-                future.set_result(result)
+            if not self._pending_requests.__contains__(response.request_id):
+                logger.error(f"Received response for unknown request ID: {response.request_id}")
+                return
+
+            try:
+                result = self._serialization_registry.deserialize(
+                    response.payload,
+                    type_name=response.payload_type,
+                    data_content_type=response.serialization_format,
+                )
+            except Exception as e:
+                logger.error(f"Error deserializing response: {e}")
+                future = self._pending_requests.pop(response.request_id)
+                future.set_exception(e)
+                return
+
+            try:
+                future = self._pending_requests.pop(response.request_id)
+                if response.error and len(response.error) > 0:
+                    future.set_exception(Exception(response.error))
+                else:
+                    future.set_result(result)
+            except Exception as e:
+                logger.error(f"Error deserializing response: {e}")

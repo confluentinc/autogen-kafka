@@ -116,6 +116,7 @@ The `KafkaStreamingAgent` provides a direct Kafka-based communication layer for 
 - **Serialization Support**: Automatic message serialization/deserialization with AutoGen's serialization registry
 - **Background Task Management**: Non-blocking message sending with background task coordination
 - **Configurable Topics**: Separate request and response topics for organized message flow
+- **Type-Safe Messages**: Requires explicit request and response type definitions for compile-time safety
 
 ### Message Patterns
 
@@ -155,7 +156,14 @@ The extension provides a Kafka-based memory implementation (`KafkaMemory`) that 
 
 ### 1. Infrastructure Setup
 
-Start a local Kafka cluster for development:
+**For the included sample application**, set up Confluent Cloud:
+
+1. **Create a Confluent Cloud account** and Kafka cluster
+2. **Set up Schema Registry** with API keys
+3. **Create required topics** in your cluster
+4. **Deploy the Flink SQL job** for the remote sentiment analysis agent
+
+**For local development**, start a local Kafka cluster:
 
 ```bash
 # Using the provided Docker Compose
@@ -186,6 +194,191 @@ All implementations follow these core patterns:
 2. **Agent Registration**: Register agent factories and instances
 3. **Message Handling**: Implement agents that process incoming messages
 4. **Communication**: Use direct messaging or topic publishing for agent interaction
+
+### 4. Practical Usage Examples
+
+The project includes complete sample applications in `python/packages/exemple/` that demonstrate both Kafka and GRPC runtime usage:
+
+#### Quick Start with Sample Application
+
+```python
+# Run the interactive distributed sentiment analysis sample
+cd python/packages/exemple
+python main.py
+```
+
+The sample application demonstrates a **distributed sentiment analysis system**:
+- **Local Agent**: Python application using AutoGen Kafka Extension
+- **Remote Agent**: Flink SQL job with OpenAI integration
+- **Cloud Infrastructure**: Confluent Cloud for messaging
+- **Interactive Interface**: Input text for sentiment analysis
+- **Runtime Selection**: Choose between Kafka and GRPC at startup
+
+#### Creating Your Own Agent Application
+
+**Step 1: Define Message Types**
+
+```python
+from dataclasses import dataclass
+from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+
+@dataclass
+class SentimentRequest(KafkaMessageType):
+    text: str
+
+@dataclass
+class SentimentResponse(KafkaMessageType):
+    sentiment: str
+```
+
+**Step 2: Create Configuration File**
+
+```yaml
+kafka:
+    name: "my_agent_runtime"
+    bootstrap_servers: "localhost:9092"
+    group_id: "my_group"
+    client_id: "my_client"
+    
+agent:
+    request_topic: "agent_requests"
+    response_topic: "agent_responses"
+    
+runtime:
+    runtime_requests: "runtime_requests"
+    runtime_responses: "runtime_responses"
+    registry_topic: "agent_registry"
+    subscription_topic: "agent_subscription"
+    publish_topic: "publish"
+```
+
+**Step 3: Implement Your Agent Wrapper**
+
+```python
+from abc import ABC, abstractmethod
+from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
+
+class AgentBase(ABC):
+    def __init__(self, runtime):
+        self._agent_config = KafkaAgentConfig.from_file("config.yml")
+        self._runtime = runtime
+    
+    def is_running(self) -> bool:
+        return self._runtime is not None and self._runtime.is_running()
+    
+    async def new_agent(self):
+        agent = KafkaStreamingAgent(
+            config=self._agent_config,
+            description="My custom agent",
+            request_type=SentimentRequest,
+            response_type=SentimentResponse,
+        )
+        await agent.start()
+        await agent.wait_for_streams_to_start()
+        return agent
+    
+    async def start(self):
+        await self._start()
+        # Register serializers and agent factory
+        await self._runtime.register_factory("my_agent", self.new_agent)
+    
+    async def get_sentiment(self, text: str) -> SentimentResponse:
+        response = await self._runtime.send_message(
+            message=SentimentRequest(text),
+            recipient=AgentId(type="my_agent", key="default")
+        )
+        return response
+    
+    @abstractmethod
+    async def _start(self):
+        pass
+    
+    @abstractmethod
+    async def stop(self):
+        pass
+```
+
+**Step 4: Choose Runtime Implementation**
+
+```python
+# Kafka Runtime
+from autogen_kafka_extension import KafkaAgentRuntime, KafkaAgentRuntimeConfig
+
+class KafkaAgentApp(AgentBase):
+    def __init__(self):
+        config = KafkaAgentRuntimeConfig.from_file("config.yml")
+        runtime = KafkaAgentRuntime(config=config)
+        super().__init__(runtime=runtime)
+    
+    async def _start(self):
+        await self._runtime.start_and_wait_for()
+    
+    async def stop(self):
+        if self._runtime:
+            await self._runtime.stop()
+
+# GRPC Runtime
+from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime
+
+class GrpcAgentApp(AgentBase):
+    def __init__(self):
+        runtime = GrpcWorkerAgentRuntime("localhost:50051")
+        super().__init__(runtime=runtime)
+    
+    async def _start(self):
+        await self._runtime.start()
+    
+    async def stop(self):
+        await self._runtime.stop()
+```
+
+**Step 5: Build Your Application**
+
+```python
+import asyncio
+import aiorun
+
+class Application:
+    def __init__(self):
+        self.agent_app = None
+    
+    async def start(self):
+        # Choose runtime
+        runtime_choice = input("Select runtime (Kafka/GRPC): ")
+        
+        if runtime_choice.upper() == "GRPC":
+            self.agent_app = GrpcAgentApp()
+        else:
+            self.agent_app = KafkaAgentApp()
+        
+        await self.agent_app.start()
+        
+        # Interactive loop
+        while True:
+            text = input("Enter text for analysis (or 'exit'): ")
+            if text == "exit":
+                break
+                
+            result = await self.agent_app.get_sentiment(text)
+            print(f"Result: {result.sentiment}")
+        
+        await self.agent_app.stop()
+    
+    async def shutdown(self, loop):
+        if self.agent_app and self.agent_app.is_running():
+            await self.agent_app.stop()
+
+if __name__ == "__main__":
+    app = Application()
+    aiorun.run(app.start(), stop_on_unhandled_errors=True, 
+               shutdown_callback=app.shutdown)
+```
+
+This pattern provides:
+- **Flexibility**: Easy switching between different runtimes
+- **Scalability**: Horizontal scaling with Kafka runtime
+- **Maintainability**: Clear separation of concerns
+- **Extensibility**: Easy to add new runtime types or modify behavior
 
 ## 🛠 Development
 

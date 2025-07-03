@@ -96,18 +96,30 @@ class KafkaAgentConfig(ServiceBaseConfig):
             ValueError: If required parameters are missing or invalid.
         """
         # Extract Kafka configuration
-        kafka_data = data.get('kafka', {})
+        kafka_data = data.get(KafkaConfig.config_key(), {})
         if not kafka_data:
-            raise ValueError("'kafka' configuration is required")
-            
+            raise ValueError(f"'{KafkaConfig.config_key()}' configuration is required")
+
+        # If schema_registry is at the top level (from environment variables),
+        # move it into the kafka_data
+        if 'schema_registry' in data and 'schema_registry' not in kafka_data:
+            kafka_data['schema_registry'] = data['schema_registry']
+
         kafka_config = KafkaConfig.from_dict(kafka_data)
-        
+
+        agent_data = data.get(cls.config_key(), {})
+
         # Extract agent-specific parameters
-        request_topic = data.get('request_topic', 'agent_request')
-        response_topic = data.get('response_topic', 'agent_response')
+        request_topic = agent_data.get('request_topic', 'agent_request')
+        response_topic = agent_data.get('response_topic', 'agent_response')
         
         return cls(
             kafka_config=kafka_config,
             request_topic=request_topic,
             response_topic=response_topic
-        ) 
+        )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Kafka agents."""
+        return 'agent'

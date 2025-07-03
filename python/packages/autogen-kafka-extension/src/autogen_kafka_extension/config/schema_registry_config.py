@@ -33,7 +33,7 @@ class SchemaRegistryConfig(BaseConfig):
 
         if self.api_key and self.api_secret:
             config.update({
-                'basic.auth.credentials.source': 'USER_INFO',
+                # 'basic.auth.credentials.source': 'USER_INFO',
                 'basic.auth.user.info': f'{self.api_key}:{self.api_secret}'
             })
 
@@ -75,6 +75,11 @@ class SchemaRegistryConfig(BaseConfig):
             errors=errors,
             warnings=warnings
         )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Schema Registry."""
+        return 'schema_registry'
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'SchemaRegistryConfig':

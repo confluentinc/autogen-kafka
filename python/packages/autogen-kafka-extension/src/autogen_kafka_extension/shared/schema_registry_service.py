@@ -16,11 +16,11 @@ class SchemaRegistryConfig:
     def __init__(
             self,
             url: str = "http://localhost:8081",
-            api_key: Optional[str] = None,
-            api_secret: Optional[str] = None,
-            ssl_ca_location: Optional[str] = None,
-            ssl_cert_location: Optional[str] = None,
-            ssl_key_location: Optional[str] = None
+            api_key: str | None = None,
+            api_secret: str | None = None,
+            ssl_ca_location: str | None = None,
+            ssl_cert_location: str | None = None,
+            ssl_key_location: str | None = None
     ):
         self.url = url
         self.api_key = api_key

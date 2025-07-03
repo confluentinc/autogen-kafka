@@ -4,7 +4,7 @@ from typing import Optional, Callable
 from confluent_kafka.schema_registry import SchemaRegistryClient, SchemaRegistryError
 from confluent_kafka.schema_registry._sync.json_schema import JSONSerializer, JSONDeserializer
 
-from .schema_registry_config import SchemaRegistryConfig
+from autogen_kafka_extension.config.schema_registry_config import SchemaRegistryConfig
 
 logger = logging.getLogger(__name__)
 
@@ -80,7 +80,10 @@ class SchemaRegistryService:
         return JSONSerializer(
             schema_registry_client=self.client,
             schema_str=schema_str,
-            to_dict=to_dict or (lambda obj, ctx: obj.__dict__ if hasattr(obj, '__dict__') else obj)
+            to_dict=to_dict or (lambda obj, ctx: obj.__dict__ if hasattr(obj, '__dict__') else obj),
+            conf = {
+                "auto.register.schemas": True,
+            }
         )
 
     def create_json_deserializer(

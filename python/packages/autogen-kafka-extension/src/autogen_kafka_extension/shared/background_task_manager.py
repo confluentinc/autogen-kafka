@@ -22,6 +22,7 @@ def _raise_on_exception(task: Task[Any]) -> None:
     """
     exception = task.exception()
     if exception is not None:
+        logger.error("Error in background task", exc_info=exception)
         raise exception
 
 

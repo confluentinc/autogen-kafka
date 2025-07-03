@@ -10,9 +10,9 @@ from testcontainers.core.network import Network
 from testcontainers.core.waiting_utils import wait_for_logs
 from testcontainers.kafka import KafkaContainer
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension import SubscriptionService
-from autogen_kafka_extension import KafkaWorkerAgentRuntime
+from autogen_kafka_extension import KafkaAgentRuntime
 from autogen_kafka_extension import SchemaRegistryConfig, KafkaConfig
 from .utils import LoopbackAgent, MessageType, NoopAgent, CascadingAgent, ContentMessage, CascadingMessageType, \
     LoopbackAgentWithDefaultSubscription
@@ -80,10 +80,10 @@ def create_worker_config(
     group_suffix: str, 
     client_suffix: str,
     name: str = WORKER_TITLE
-) -> KafkaWorkerConfig:
+) -> KafkaAgentRuntimeConfig:
 
     """Helper function to create a WorkerConfig with standard settings."""
-    return KafkaWorkerConfig(
+    return KafkaAgentRuntimeConfig(
         kafka_config=KafkaConfig(
             name=name + f"_{group_suffix}_{client_suffix}",
             security_protocol=SecurityProtocol.PLAINTEXT,
@@ -93,7 +93,8 @@ def create_worker_config(
             client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
             schema_registry_config=SchemaRegistryConfig(
                 url=sr_host,
-            )
+            ),
+            replication_factor=1
         ),
         request_topic=TOPIC_NAMES["request"],
         subscription_topic=TOPIC_NAMES["subscription"],
@@ -117,7 +118,7 @@ async def create_started_worker(kafka_connection: str,
                                 client_suffix: str = "test"):
     """Helper function to create and start a worker runtime."""
     config = create_worker_config(kafka_connection, sr_connection, group_suffix, client_suffix)
-    worker = KafkaWorkerAgentRuntime(config=config)
+    worker = KafkaAgentRuntime(config=config)
     await worker.start()
     return worker
 
@@ -129,20 +130,20 @@ async def setup_multiple_workers(kafka_connection: str,
     workers = []
     for i in range(1, worker_count + 1):
         config = create_worker_config(kafka_connection, sr_connection, str(i), str(i))
-        worker = KafkaWorkerAgentRuntime(config=config)
+        worker = KafkaAgentRuntime(config=config)
         await worker.start()
         await asyncio.sleep(3)  # Allow time for worker to start
         workers.append(worker)
     return workers
 
 
-async def cleanup_workers(workers: List[KafkaWorkerAgentRuntime]):
+async def cleanup_workers(workers: List[KafkaAgentRuntime]):
     """Helper function to clean up multiple workers."""
     for worker in workers:
         await worker.stop()
 
 
-async def setup_messaging_agents(worker: KafkaWorkerAgentRuntime, agent_type: str):
+async def setup_messaging_agents(worker: KafkaAgentRuntime, agent_type: str):
     """Helper function to set up messaging agents."""
     worker.add_message_serializer(try_get_known_serializers_for_type(MessageType))
     await worker.register_factory(
@@ -153,7 +154,7 @@ async def setup_messaging_agents(worker: KafkaWorkerAgentRuntime, agent_type: st
     await worker.add_subscription(TypeSubscription("default", agent_type))
 
 
-async def simulate_worker_disconnect(worker: KafkaWorkerAgentRuntime):
+async def simulate_worker_disconnect(worker: KafkaAgentRuntime):
     """Helper function to simulate worker disconnect."""
     if worker.is_started is not None:  # type: ignore[reportPrivateUsage]
         try:
@@ -303,7 +304,7 @@ async def test_instance_factory_messaging(kafka_connection, sr_connection):
     cascading_agent_id = AgentId(type="instance_agent", key="instance_agent")
 
     config = create_worker_config(kafka_connection, sr_connection,"1", "1")
-    worker = KafkaWorkerAgentRuntime(config=config)
+    worker = KafkaAgentRuntime(config=config)
     
     try:
         await worker.start()
@@ -400,8 +401,8 @@ async def test_disconnected_agent(kafka_connection, sr_connection):
     config_3 = create_worker_config(kafka_connection, sr_connection,"3", "3")
 
     subscriptions = SubscriptionService(config=config_3)
-    worker1 = KafkaWorkerAgentRuntime(config=config_1)
-    worker1_2 = KafkaWorkerAgentRuntime(config=config_2)
+    worker1 = KafkaAgentRuntime(config=config_1)
+    worker1_2 = KafkaAgentRuntime(config=config_2)
 
     # Helper functions for subscription management
     def get_current_subscriptions() -> List[Subscription]:

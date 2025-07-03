@@ -2,12 +2,14 @@ import asyncio
 import json
 import logging
 from asyncio import Future
-from typing import Any, Mapping, Dict
+from typing import Any, Mapping, Dict, cast
 
 from autogen_core import MessageContext, BaseAgent, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, try_get_known_serializers_for_type
 from kstreams import ConsumerRecord, Stream, Send
+from pydantic import BaseModel
 
+from .kafka_message_type import KafkaMessageType
 from ..config.agent_config import KafkaAgentConfig
 from .event.agent_event import AgentEvent
 from ..shared.background_task_manager import BackgroundTaskManager
@@ -35,23 +37,37 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
 
     def __init__(self,
                  config: KafkaAgentConfig,
-                 description: str) -> None:
+                 description: str,
+                 request_type: type[KafkaMessageType | BaseModel],
+                 response_type: type[KafkaMessageType | BaseModel]) -> None:
         """Initialize the Kafka streaming agent.
-        
+
         Args:
-            config: Configuration object containing Kafka connection details,
-                   topic names, and other agent-specific settings
-            description: Human-readable description of the agent's purpose
-                        and capabilities
+            config: Configuration object containing Kafka connection details, topic names, and other agent-specific settings
+            description: Human-readable description of the agent's purpose and capabilities
+            request_type: Request message type, a subclass of KafkaMessageType
+            response_type: Response message type, a subclass of KafkaMessageType
         """
+        if request_type is None:
+            logging.error("Request type must be specified")
+            raise ValueError("Request type must be specified")
+        if response_type is None:
+            logging.error("Response type must be specified")
+            raise ValueError("Response type must be specified")
+
+        self._config = config
+        self._request_type = request_type
+        self._response_type = response_type
+
         # Initialize BaseAgent with the provided description
         BaseAgent.__init__(self, description)
 
         # Initialize StreamingWorkerBase with Kafka configuration
         StreamingWorkerBase.__init__(self,
                                      config=config,
-                                     topic=config.request_topic,
-                                     target_type=AgentEvent)
+                                     topic=config.response_topic,
+                                     target_type=AgentEvent,
+                                     schema_str = self._get_schema(self._response_type))
         
         # Initialize the message serialization registry for handling different message types
         self._serialization_registry = SerializationRegistry()
@@ -69,12 +85,33 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         # Manager for handling background tasks (e.g., sending messages)
         self._background_task_manager = BackgroundTaskManager()
 
+        # Create the request topic if needed
+        self._config.kafka_config.utils().create_topic(self._config.request_topic)
+
         # Initialize the serializer
         self._serializer = EventSerializer(
             topic=config.request_topic,
             source_type=AgentEvent,
-            schema_registry_service=config.kafka_config.get_schema_registry_service()
+            kafka_utils=config.kafka_config.utils(),
+            schema_str=self._get_schema(self._request_type)
         )
+
+        # Start the agent
+        logging.info("KafkaStreamingAgent initialized successfully.")
+
+    @property
+    def request_type(self) -> type[KafkaMessageType | BaseModel]:
+        return self._request_type
+
+    @property
+    def response_type(self) -> type[KafkaMessageType | BaseModel]:
+        return self._response_type
+
+    def on_start(self) -> None:
+        """Start the agent runtime.
+
+        This method is called when the agent is started. It starts the agent's
+        """
 
     async def on_message_impl(self, message: Any, ctx: MessageContext) -> Any:
         """Handle incoming messages by serializing and sending them via Kafka.
@@ -119,7 +156,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         self._pending_requests[request_id] = future
 
         # Create an AgentEvent with the serialized message
-        event = AgentEvent(id=request_id, message=serialized, message_type=type_name)
+        event = AgentEvent(id=request_id, message=json.loads(serialized), message_type=type_name)
 
         # Send the event to the Kafka topic asynchronously
         self._background_task_manager.add_task(
@@ -194,6 +231,17 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         # Wait for all background tasks to complete before closing
         await self._background_task_manager.wait_for_completion()
 
+    @staticmethod
+    def _get_schema(obj_type: type[KafkaMessageType | BaseModel]) -> str:
+        if issubclass(obj_type, BaseModel):
+            message_schema = obj_type.model_json_schema()
+        else:
+            message_schema = json.loads(obj_type.__schema__())
+
+        agent_schema : Dict[str, str] = json.loads(AgentEvent.__schema__())
+        cast(Dict[str, str], agent_schema["properties"])["message"] = message_schema
+        return json.dumps(agent_schema)
+
     async def _get_new_request_id(self) -> str:
         """Generate a new unique request ID for correlating requests and responses.
         
@@ -247,12 +295,10 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             return
 
         try:
-            # Deserialize the response message from JSON
-            # For now, we support only JSON serialization
-            message: Dict[str, Any] = json.loads(event.message)
-            
+            evt_instance = self._response_type(**event.message)
+
             # Resolve the future with the deserialized message
-            future.set_result(message)
+            future.set_result(evt_instance)
         except Exception as e:
             # If deserialization fails, resolve the future with the exception
             logging.error(f"Error deserializing message for request ID {request_id}: {e}")

@@ -15,6 +15,12 @@ from pathlib import Path
 from typing import Any, Dict, Optional, Union, TypeVar
 import logging
 
+from .kafka_config import KafkaConfig
+from .memory_config import KafkaMemoryConfig
+from .agent_config import KafkaAgentConfig
+from .agent_runtime_config import KafkaAgentRuntimeConfig
+from .schema_registry_config import SchemaRegistryConfig
+
 try:
     import yaml
     HAS_YAML = True
@@ -125,13 +131,13 @@ class ConfigLoader:
                 # Handle special cases first
                 if parts[0] == 'schema' and parts[1] == 'registry':
                     # SCHEMA_REGISTRY_* should become schema_registry.*
-                    section = 'schema_registry'
+                    section = SchemaRegistryConfig.config_key()
                     key_name = '_'.join(parts[2:]) if len(parts) > 2 else ''
-                    
+
                     if section not in config:
                         config[section] = {}
                     config[section][key_name] = parsed_value
-                elif parts[0] in ['kafka', 'memory', 'agent', 'worker', 'streaming']:
+                elif parts[0] in [KafkaConfig.config_key(), KafkaMemoryConfig.config_key(), KafkaAgentConfig.config_key(), KafkaAgentRuntimeConfig.config_key()]:
                     # Treat as sectioned: first part is section, rest joined with underscore is key
                     section = parts[0]
                     key_name = '_'.join(parts[1:])
@@ -228,9 +234,9 @@ class ConfigLoader:
     
     @staticmethod
     def load_config(
-        config_file: Optional[Union[str, Path]] = None,
+        config_file: Union[str, Path] | None = None,
         env_prefix: str = "AUTOGEN_KAFKA",
-        base_config: Optional[Dict[str, Any]] = None
+        base_config: Dict[str, Any] | None = None
     ) -> Dict[str, Any]:
         """Load configuration from multiple sources with priority merging.
         

@@ -10,7 +10,7 @@ from autogen_core import (
 from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
-from autogen_kafka_extension import KafkaWorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.messaging_client import MessagingClient
 from autogen_kafka_extension.runtimes.services.agent_registry import AgentRegistry
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
@@ -24,7 +24,7 @@ T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
 
 
-class KafkaWorkerAgentRuntime(StreamingWorkerBase[KafkaWorkerConfig], AgentRuntime):
+class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRuntime):
     """
     A Kafka-based agent runtime for distributed multi-agent systems.
     
@@ -80,10 +80,10 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[KafkaWorkerConfig], AgentRunti
 
     def __init__(
         self,
-        config: KafkaWorkerConfig,
+        config: KafkaAgentRuntimeConfig,
         tracer_provider: TracerProvider | None = None
     ) -> None:
-        """Initialize a new KafkaWorkerAgentRuntime instance.
+        """Initialize a new KafkaAgentRuntime instance.
         
         Sets up the Kafka worker runtime with all necessary components including
         agent registry, subscription service, messaging client, and message processor.
@@ -140,7 +140,27 @@ class KafkaWorkerAgentRuntime(StreamingWorkerBase[KafkaWorkerConfig], AgentRunti
         self._pending_requests_lock = asyncio.Lock()
         self._next_request_id = 0
 
-    async def start(self) -> None:
+    async def start_and_wait_for(self, timeout : int = 30):
+        """
+        Start the Kafka stream processing engine and wait for background tasks to start.
+        :param timeout: The timeout in seconds.
+
+        Initializes and starts all internal services in the correct order:
+        1. Subscription service for managing agent subscriptions
+        2. Messaging client for sending/receiving messages
+        3. Agent registry for agent discovery and management
+        4. Underlying streaming service for Kafka connectivity
+        5. Wait for all background tasks to start.
+
+        This method is idempotent - calling it multiple times has no additional effect.
+        """
+        if self.is_started:
+            return
+
+        await self.start()
+        await self.wait_for_streams_to_start(timeout=timeout)
+
+    async def start(self, ) -> None:
         """Start the Kafka stream processing engine and subscribe to topics.
         
         Initializes and starts all internal services in the correct order:

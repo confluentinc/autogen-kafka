@@ -96,7 +96,7 @@ The extension provides three main components for distributed agent communication
 A distributed agent runtime that enables agents to communicate across multiple processes and machines through Kafka topics.
 
 ### 2. Streaming Agent (`KafkaStreamingAgent`) 
-A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen agent systems to communicate with external Kafka-based services transparently.
+A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen agent systems to communicate with external Kafka-based services transparently. **Note:** The API now requires explicit `request_type` and `response_type` parameters for type safety.
 
 ### 3. Distributed Memory (`KafkaMemory`)
 A memory implementation that synchronizes state across multiple agent instances using dedicated Kafka topics.
@@ -118,11 +118,79 @@ This starts:
 - Schema Registry (localhost:8081)
 - Control Center (localhost:9021)
 
-### 2. Basic Agent Runtime Setup
+### 2. Run the Complete Sample Application
+
+The `packages/exemple/` directory contains a complete sample application that demonstrates a **distributed sentiment analysis system** using:
+- **AutoGen Kafka Extension** for the client-side agent
+- **Confluent Cloud** for messaging infrastructure  
+- **Flink SQL** for the remote sentiment analysis agent
+
+```bash
+cd packages/exemple
+python main.py
+```
+
+**What the sample demonstrates:**
+- **Runtime Selection**: Choose between Kafka and GRPC at startup
+- **Distributed Processing**: Local agent communicates with remote Flink SQL agent
+- **Cloud Integration**: Uses Confluent Cloud for scalable messaging
+- **AI Integration**: Remote agent uses OpenAI for sentiment analysis
+- **Interactive Processing**: Input text for sentiment analysis
+- **Proper Lifecycle**: Handles startup, processing, and shutdown
+
+**Sample Configuration** (`sample.config.yml`):
+```yaml
+kafka:
+    name: "simple_kafka"
+    bootstrap_servers: "[YOUR_CONFLUENT_CLOUD_BOOTSTRAP_SERVERS]:9092"
+    group_id: "simple_group_abc"
+    client_id: "simple_client_abc"
+    sasl_plain_username: "[YOUR_CONFLUENT_CLOUD_API_KEY]"
+    sasl_plain_password: "[YOUR_CONFLUENT_CLOUD_API_SECRET]"
+    security_protocol: "SASL_SSL"
+    sasl_mechanism: "PLAIN"
+    schema_registry:
+        url: "[YOUR_CONFLUENT_CLOUD_SCHEMA_REGISTRY_URL]"
+        api_key: "[YOUR_SCHEMA_REGISTRY_API_KEY]"
+        api_secret: "[YOUR_SCHEMA_REGISTRY_API_SECRET]"
+    
+agent:
+    request_topic: "simple_request_topic"
+    response_topic: "simple_response_topic"
+    
+runtime:
+    runtime_requests: "runtime_requests"
+    runtime_responses: "runtime_responses"
+    registry_topic: "agent_registry"
+    subscription_topic: "agent_subscription"
+    publish_topic: "publish"
+```
+
+**Sample Application Structure:**
+```
+packages/exemple/
+├── main.py                # Main application entry point
+├── sample.py              # Base Sample class (abstract)
+├── kafka_sample.py        # Kafka runtime implementation
+├── grpcs_sample.py        # GRPC runtime implementation
+├── events.py              # Message type definitions
+├── sample.config.yml      # Configuration file
+└── flink.sql              # Flink SQL job for remote agent
+```
+
+**Key Features:**
+- **Distributed Architecture**: Local client + remote Flink SQL agent
+- **Cloud Native**: Built for Confluent Cloud and Flink
+- **AI-Powered**: Uses OpenAI for sentiment analysis
+- **Type-Safe Messages**: Define request/response types with JSON schema
+- **Configuration Management**: External YAML configuration with validation
+- **Interactive Interface**: Command-line interface for testing
+
+### 3. Basic Agent Runtime Setup
 
 ```python
 import asyncio
-from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_core import BaseAgent, MessageContext
 
@@ -136,41 +204,44 @@ config = WorkerConfig(
     response_topic="agent-responses"
 )
 
+
 # Create a simple agent
 class EchoAgent(BaseAgent):
     def __init__(self):
         super().__init__("Echo Agent")
-    
+
     async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
         return f"Echo: {message}"
+
 
 async def main():
     # Create and start the runtime
     runtime = KafkaWorkerAgentRuntime(config)
-    
+
     # Register agent factory
     await runtime.register_factory("echo_agent", EchoAgent)
-    
+
     # Start the runtime
     await runtime.start()
-    
+
     try:
         # Runtime processes messages until stopped
         await asyncio.Event().wait()
     finally:
         await runtime.stop()
 
+
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 3. Kafka Bridge Agent Example
+### 4. Kafka Bridge Agent Example
 
 ```python
 import asyncio
 from autogen_kafka_extension.agent.kafka_streaming_agent import KafkaStreamingAgent
 from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
-from autogen_kafka_extension.runtimes.worker_runtime import KafkaWorkerAgentRuntime
+from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
 from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
 from autogen_core import BaseAgent, MessageContext, AgentId
 
@@ -187,65 +258,102 @@ runtime_config = WorkerConfig(
 # Configure the Kafka bridge agent to connect to external Kafka service
 kafka_bridge_config = KafkaAgentConfig(
     name="external-service-bridge",
-    group_id="bridge-group", 
+    group_id="bridge-group",
     client_id="bridge-client",
     bootstrap_servers=["localhost:9092"],
-    request_topic="external-service-requests",    # Topic to send requests to external service
-    response_topic="external-service-responses"   # Topic to receive responses from external service
+    request_topic="external-service-requests",  # Topic to send requests to external service
+    response_topic="external-service-responses"  # Topic to receive responses from external service
 )
+
 
 # Example AutoGen agent that will use the Kafka bridge
 class DataProcessor(BaseAgent):
     def __init__(self):
         super().__init__("Data Processor")
-    
+
     async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
         # This agent can now communicate with external Kafka services
         # through the bridge agent as if it were a regular AutoGen agent
-        
+
         # Send request to external service via Kafka bridge
         external_request = {
             "data": message,
             "operation": "process",
             "timestamp": "2024-01-01T00:00:00Z"
         }
-        
+
         # The bridge agent will serialize this message, send it to Kafka,
         # wait for the response, and return it as if it were a direct agent call
         response = await self.send_message(external_request, AgentId("kafka_bridge", "default"))
-        
+
         return f"Processed via external service: {response}"
+
 
 async def main():
     # Create the runtime
     runtime = KafkaWorkerAgentRuntime(runtime_config)
-    
+
     # Register regular AutoGen agents
     await runtime.register_factory("data_processor", DataProcessor)
-    
+
     # Register the Kafka bridge agent - it's treated like any other agent
-    kafka_bridge = KafkaStreamingAgent(kafka_bridge_config, "External Service Bridge")
+    kafka_bridge = KafkaStreamingAgent(
+        config=kafka_bridge_config,
+        description="External Service Bridge",
+        request_type=SentimentRequest,
+        response_type=SentimentResponse,
+    )
     await runtime.register_agent_instance(kafka_bridge, AgentId("kafka_bridge", "default"))
-    
+
     # Start the runtime
     await runtime.start()
-    
+
     try:
         # Now AutoGen agents can communicate with external Kafka services
         # through the registered bridge agent transparently
         print("Runtime started with Kafka bridge agent registered")
         print(f"Bridge connects to topics: {kafka_bridge_config.request_topic} -> {kafka_bridge_config.response_topic}")
-        
+
         # Runtime processes messages until stopped
         await asyncio.Event().wait()
     finally:
         await runtime.stop()
 
+
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-### 4. Distributed Memory Usage
+### 5. KafkaStreamingAgent API Changes
+
+**Important:** The `KafkaStreamingAgent` constructor now requires explicit type parameters:
+
+```python
+from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
+from dataclasses import dataclass
+from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+
+# Define your message types
+@dataclass
+class MyRequest(KafkaMessageType):
+    text: str
+
+@dataclass
+class MyResponse(KafkaMessageType):
+    result: str
+
+# Create agent with required type parameters
+agent = KafkaStreamingAgent(
+    config=config,
+    description="My agent description",
+    request_type=MyRequest,      # Required
+    response_type=MyResponse,    # Required
+)
+```
+
+**Breaking Change:** The old constructor `KafkaStreamingAgent(config, description)` is no longer supported. Both `request_type` and `response_type` are now required parameters.
+
+### 6. Distributed Memory Usage
 
 ```python
 import asyncio
@@ -382,7 +490,7 @@ Run the test suite:
 
 ```bash
 # Run all tests (as configured in the project)
-PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py tests/test_kafka_memory.py tests/test_kafka_streaming_agent.py -v
+PYTHONPATH=tests:src uv run python -m pytest tests/test_agent_runtime.py tests/test_kafka_memory.py tests/test_kafka_streaming_agent.py -v
 
 # Or using the provided shell script
 ./run_tests.sh
@@ -390,7 +498,7 @@ PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py tests/
 # Run individual test files
 PYTHONPATH=tests:src uv run python -m pytest tests/test_kafka_streaming_agent.py -v
 PYTHONPATH=tests:src uv run python -m pytest tests/test_kafka_memory.py -v
-PYTHONPATH=tests:src uv run python -m pytest tests/test_worker_runtime.py -v
+PYTHONPATH=tests:src uv run python -m pytest tests/test_agent_runtime.py -v
 
 # Run with coverage
 PYTHONPATH=tests:src uv run python -m pytest tests/ --cov=autogen_kafka_extension -v

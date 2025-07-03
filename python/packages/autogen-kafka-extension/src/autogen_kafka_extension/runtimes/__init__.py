@@ -2,10 +2,10 @@
 
 This package provides Kafka-based agent runtime implementations and messaging clients.
 """
-from .worker_runtime import KafkaWorkerAgentRuntime
+from .kafka_agent_runtime import KafkaAgentRuntime
 from .messaging_client import MessagingClient
 
 __all__ = [
-    "KafkaWorkerAgentRuntime",
+    "KafkaAgentRuntime",
     "MessagingClient",
 ]

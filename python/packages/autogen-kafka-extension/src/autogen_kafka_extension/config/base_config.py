@@ -5,7 +5,7 @@ and validation logic used across all configuration classes in the extension.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, TypeVar, Generic, Union, Type, cast
+from typing import Any, Dict, Optional, TypeVar, Union, Type
 from dataclasses import dataclass
 from pathlib import Path
 import threading
@@ -21,7 +21,7 @@ class ValidationResult:
     """Result of configuration validation."""
     is_valid: bool
     errors: list[str]
-    warnings: Optional[list[str]] = None
+    warnings: list[str] | None = None
     
     def __post_init__(self):
         if self.warnings is None:
@@ -41,7 +41,7 @@ class BaseConfig(ABC):
     
     def __init__(self) -> None:
         """Initialize the base configuration."""
-        self._validation_result: Optional[ValidationResult] = None
+        self._validation_result: ValidationResult | None = None
         self._validation_lock = threading.RLock()
         # Note: Validation is deferred until first access to avoid initialization order issues
 
@@ -61,7 +61,7 @@ class BaseConfig(ABC):
             return False
     
     @property
-    def validation_result(self) -> Optional[ValidationResult]:
+    def validation_result(self) -> ValidationResult | None:
         """Get the last validation result.
         
         Returns:
@@ -160,7 +160,7 @@ class BaseConfig(ABC):
         cls: Type[T], 
         config_file: Union[str, Path],
         env_prefix: str = "AUTOGEN_KAFKA",
-        base_config: Optional[Dict[str, Any]] = None
+        base_config: Dict[str, Any] | None = None
     ) -> T:
         """Load configuration from a file with optional environment variable overrides.
         
@@ -191,7 +191,7 @@ class BaseConfig(ABC):
     def from_env(
         cls: Type[T],
         env_prefix: str = "AUTOGEN_KAFKA",
-        base_config: Optional[Dict[str, Any]] = None
+        base_config: Dict[str, Any] | None = None
     ) -> T:
         """Load configuration from environment variables.
         
@@ -212,6 +212,18 @@ class BaseConfig(ABC):
         )
         
         return cls.from_dict(merged_config)
+
+    @staticmethod
+    def config_key():
+        """Get the configuration key for this class.
+
+        This method can be overridden by subclasses to provide a unique
+        key for identifying the configuration type.
+
+        Returns:
+            A string representing the configuration key.
+        """
+        raise NotImplementedError("Subclasses must implement config_key method.")
 
     def __repr__(self) -> str:
         """Return string representation of the configuration."""

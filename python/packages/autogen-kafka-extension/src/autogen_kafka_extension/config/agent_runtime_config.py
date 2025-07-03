@@ -11,7 +11,7 @@ from .kafka_config import KafkaConfig
 
 
 @auto_validate_after_init
-class KafkaWorkerConfig(ServiceBaseConfig):
+class KafkaAgentRuntimeConfig(ServiceBaseConfig):
     """Configuration for Kafka worker runtimes.
     
     This class extends the base KafkaConfig with worker-specific settings
@@ -26,8 +26,8 @@ class KafkaWorkerConfig(ServiceBaseConfig):
         self,
             kafka_config: KafkaConfig,
         *,
-        request_topic: str = "worker_requests",
-        response_topic: str = "worker_responses", 
+        request_topic: str = "runtime_requests",
+        response_topic: str = "runtime_responses",
         registry_topic: str = "agent_registry",
         subscription_topic: str = "agent_subscriptions",
         publish_topic: str = "agent_publishes",
@@ -93,7 +93,7 @@ class KafkaWorkerConfig(ServiceBaseConfig):
         ]
     
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'KafkaWorkerConfig':
+    def from_dict(cls, data: Dict[str, Any]) -> 'KafkaAgentRuntimeConfig':
         """Create a KafkaWorkerConfig instance from a dictionary.
         
         Args:
@@ -128,9 +128,9 @@ class KafkaWorkerConfig(ServiceBaseConfig):
             ValueError: If required parameters are missing or invalid.
         """
         # Extract kafka configuration
-        kafka_data = data.get('kafka', {})
+        kafka_data = data.get(KafkaConfig.config_key(), {})
         if not kafka_data:
-            raise ValueError("'kafka' configuration is required")
+            raise ValueError(f"'{KafkaConfig.config_key()}' configuration is required")
         
         # If schema_registry is at the top level (from environment variables), 
         # move it into the kafka_data
@@ -139,15 +139,15 @@ class KafkaWorkerConfig(ServiceBaseConfig):
         
         kafka_config = KafkaConfig.from_dict(kafka_data)
         
-        # Extract worker-specific configuration
-        worker_data = data.get('worker', {})
+        # Extract runtime-specific configuration
+        runtime_data = data.get(cls.config_key(), {})
         
         # Get worker topic names with defaults
-        request_topic = worker_data.get('request_topic', 'worker_requests')
-        response_topic = worker_data.get('response_topic', 'worker_responses')
-        registry_topic = worker_data.get('registry_topic', 'agent_registry')
-        subscription_topic = worker_data.get('subscription_topic', 'agent_subscriptions')
-        publish_topic = worker_data.get('publish_topic', 'agent_publishes')
+        request_topic = runtime_data.get('request_topic', 'runtime_requests')
+        response_topic = runtime_data.get('response_topic', 'runtime_responses')
+        registry_topic = runtime_data.get('registry_topic', 'agent_registry')
+        subscription_topic = runtime_data.get('subscription_topic', 'agent_subscriptions')
+        publish_topic = runtime_data.get('publish_topic', 'agent_publishes')
         
         return cls(
             kafka_config=kafka_config,
@@ -188,4 +188,9 @@ class KafkaWorkerConfig(ServiceBaseConfig):
             is_valid=len(errors) == 0,
             errors=errors,
             warnings=warnings
-        ) 
+        )
+
+    @staticmethod
+    def config_key():
+        """Return the configuration key for Kafka worker runtime."""
+        return 'runtime'
