@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import warnings
 from typing import Dict, Any, Awaitable, List, Mapping
@@ -13,7 +12,7 @@ from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
 from kstreams import Send
 
-from autogen_kafka_extension import KafkaAgentRuntimeConfig, KafkaStreamingAgent
+from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
@@ -224,9 +223,6 @@ class MessageProcessor:
 
         # Get the recipient agent
         rec_agent = await self._agent_manager.get_agent(recipient)
-        if isinstance(rec_agent, KafkaStreamingAgent) and not rec_agent.is_started:
-            await rec_agent.start()
-            await rec_agent.wait_for_streams_to_start()
 
         message_context = MessageContext(
             sender=sender,
@@ -246,16 +242,10 @@ class MessageProcessor:
             ):
                 result = await rec_agent.on_message(message, ctx=message_context)
 
-        if not isinstance(rec_agent, KafkaStreamingAgent):
-            # Serialize and send the successful response
-            result_type = self._serialization_registry.type_name(result)
-            serialized_result = self._serialization_registry.serialize(
-                result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
-            )
-        else:
-            # In this case we treat the response as just a dictionary
-            serialized_result = json.dumps(result).encode("utf-8")
-            result_type = rec_agent.response_type.__name__
+        result_type = self._serialization_registry.type_name(result)
+        serialized_result = self._serialization_registry.serialize(
+            result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
+        )
 
         response_message = ResponseEvent(
             request_id=request.request_id,

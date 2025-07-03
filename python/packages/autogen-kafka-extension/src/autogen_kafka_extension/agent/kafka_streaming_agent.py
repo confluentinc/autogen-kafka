@@ -295,8 +295,10 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             return
 
         try:
+            evt_instance = self._response_type(**event.message)
+
             # Resolve the future with the deserialized message
-            future.set_result(event.message)
+            future.set_result(evt_instance)
         except Exception as e:
             # If deserialization fails, resolve the future with the exception
             logging.error(f"Error deserializing message for request ID {request_id}: {e}")

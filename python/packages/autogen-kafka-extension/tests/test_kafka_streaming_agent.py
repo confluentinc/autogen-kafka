@@ -21,6 +21,15 @@ class Request(BaseModel):
     def __init__(self, **data):
         super().__init__(**data)
 
+@dataclass
+class Response(BaseModel):
+    result: str = "test message"
+    data: str = "text"
+
+    def __init__(self, **data):
+        super().__init__(**data)
+
+
 class TestKafkaStreamingAgent:
     """Test suite for KafkaStreamingAgent class."""
 
@@ -59,7 +68,7 @@ class TestKafkaStreamingAgent:
                 config=mock_config,
                 description="Test agent description",
                 request_type=Request,
-                response_type=Request
+                response_type=Response
             )
             
             # Set the config attribute that would normally be set by StreamingWorkerBase
@@ -211,7 +220,7 @@ class TestKafkaStreamingAgent:
         """Test _handle_event with a valid response event."""
         # Setup test data
         request_id = "test_request_id"
-        test_response = {"result": "success", "data": "test_data"}
+        test_response = Response(result= "success",data= "test_data")
         
         # Create a future and add it to pending requests
         future = asyncio.get_event_loop().create_future()
@@ -220,7 +229,7 @@ class TestKafkaStreamingAgent:
         # Create test event
         event = AgentEvent(
             id=request_id,
-            message=test_response,
+            message={"result":test_response.result, "data":test_response.data},
             message_type="response"
         )
         
@@ -407,7 +416,7 @@ class TestKafkaStreamingAgent:
         tasks = []
         for i in range(num_requests):
             request_id = f"request_{i}"
-            response_data = {"request_id": request_id, "result": f"result_{i}"}
+            response_data = {"data": request_id, "result": f"result_{i}"}
             tasks.append(process_event(request_id, response_data))
         
         await asyncio.gather(*tasks)
@@ -416,8 +425,8 @@ class TestKafkaStreamingAgent:
         for i, (request_id, future) in enumerate(futures.items()):
             assert future.done()
             result = future.result()
-            assert result["request_id"] == request_id
-            assert result["result"] == f"result_{i}"
+            assert result.data== request_id
+            assert result.result == f"result_{i}"
         
         # Verify all pending requests were cleaned up
         assert len(agent._pending_requests) == 0 

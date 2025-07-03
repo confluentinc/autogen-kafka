@@ -1,5 +1,5 @@
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/autogen-kafka-extension","packages/exemple"]
 
 [tool.uv.sources]
 autogen-kafka-extension = { workspace = true }
