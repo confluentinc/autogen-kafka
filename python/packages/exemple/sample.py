@@ -18,6 +18,9 @@ class Sample(ABC):
         self._agent_config = KafkaAgentConfig.from_file(f"{pathlib.Path(__file__).parent.resolve()}/config.yml")
         self._runtime = runtime
 
+    def is_running(self) -> bool:
+        return self._runtime is not None and self._runtime.is_running()
+
     async def new_agent(self) -> Agent:
         """Create a new agent instance."""
         agent =  KafkaStreamingAgent(
