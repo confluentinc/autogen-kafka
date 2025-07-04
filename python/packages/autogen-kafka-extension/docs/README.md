@@ -41,8 +41,8 @@ The AutoGen Kafka Extension enables distributed multi-agent systems through Apac
 #### Pattern 1: Distributed Agent Runtime
 ```python
 # Multiple runtimes coordinating across processes/machines
-runtime1 = KafkaWorkerAgentRuntime(config_worker1)
-runtime2 = KafkaWorkerAgentRuntime(config_worker2)
+runtime1 = KafkaAgentRuntime(config_worker1)
+runtime2 = KafkaAgentRuntime(config_worker2)
 
 # Agents can communicate across runtimes
 await runtime1.send_message(message, agent_id_on_runtime2)
@@ -64,7 +64,7 @@ await bridge.send_message(request, external_service_topic)
 ```python
 # Mix local and distributed agents
 local_runtime = SingleThreadedAgentRuntime()
-kafka_runtime = KafkaWorkerAgentRuntime(kafka_config)
+kafka_runtime = KafkaAgentRuntime(kafka_config)
 
 # Some agents local, others distributed
 await local_runtime.register_factory("local_agent", LocalAgent)
