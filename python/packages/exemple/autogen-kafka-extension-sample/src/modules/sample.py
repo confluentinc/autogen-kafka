@@ -6,7 +6,7 @@ from typing import TypeVar
 from autogen_core import Agent, AgentRuntime, try_get_known_serializers_for_type, AgentId
 
 from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
-from packages.exemple.events import SentimentResponse, SentimentRequest
+from .events import SentimentResponse, SentimentRequest
 
 logger = logging.getLogger(__name__)
 

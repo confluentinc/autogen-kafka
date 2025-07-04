@@ -1,9 +1,8 @@
 import logging
 
 import aiorun
-from packages.exemple.grpcs_sample import GRPCSample
-from packages.exemple.kafka_sample import KafkaSample
-from packages.exemple.sample import Sample
+
+from modules import GRPCSample, KafkaSample, Sample
 
 logger = logging.getLogger(__name__)
 
