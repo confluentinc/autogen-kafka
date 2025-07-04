@@ -1,7 +1,7 @@
 
 from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime, GrpcWorkerAgentRuntimeHost
 
-from packages.exemple.sample import Sample
+from .sample import Sample
 
 
 class GRPCSample(Sample):

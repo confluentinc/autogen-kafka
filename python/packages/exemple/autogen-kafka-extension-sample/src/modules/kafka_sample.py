@@ -2,7 +2,7 @@ import logging
 import pathlib
 
 from autogen_kafka_extension import KafkaAgentRuntimeConfig, KafkaAgentRuntime
-from packages.exemple.sample import Sample
+from .sample import Sample
 
 logger = logging.getLogger(__name__)
 
