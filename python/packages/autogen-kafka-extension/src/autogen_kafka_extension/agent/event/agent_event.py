@@ -1,6 +1,11 @@
-from typing import Dict, Any
+import json
+from typing import Dict, Any, cast
 
+from pydantic import BaseModel
+
+from ..kafka_message_type import KafkaMessageType
 from ...shared.events.event_base import EventBase
+from ...shared.schema_utils import SchemaUtils
 
 
 class AgentEvent(EventBase):
@@ -53,6 +58,21 @@ class AgentEvent(EventBase):
             "message_type": self._message_type,
             "message":  self._message
         }
+
+    @staticmethod
+    def wrap_schema(obj_type: type[KafkaMessageType | BaseModel]) -> str:
+        """
+        Wraps the schema of the given object type into an AgentEvent schema.
+        :param obj_type: The type of the object to wrap.
+        :return: A JSON string representing the AgentEvent schema with the specified message type.
+        """
+        message_schema = SchemaUtils.get_schema(obj_type)
+
+        agent_schema : Dict[str, Any] = json.loads(AgentEvent.__schema__())
+        cast(Dict[str, Any], agent_schema["properties"])["message"] = message_schema
+
+        return json.dumps(agent_schema)
+
 
     @classmethod
     def __from_dict__(cls, data: Dict[str, Any]) -> 'AgentEvent':

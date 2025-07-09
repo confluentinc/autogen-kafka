@@ -1,0 +1,20 @@
+kafka:
+    name: "worker2_kafka"
+    bootstrap_servers: "pkc-419q3.us-east4.gcp.confluent.cloud:9092"
+    group_id: "worker2_group_abc"
+    client_id: "worker2_client_abc"
+    sasl_plain_username: "LMUEB34T24W3XWW6"
+    sasl_plain_password: "rBjfh8YSWQSiNet2fuZ1TwpNkmhCK42CMgE1uhlnqtLdyyidO8UYb7o6DkgmDWYe"
+    security_protocol: "SASL_SSL"
+    sasl_mechanism: "PLAIN"
+    schema_registry:
+        url: "https://psrc-yg906.us-east-2.aws.confluent.cloud"
+        api_key: "YWDZBN2ZYK3Y2Y2S"
+        api_secret: "f9QyCN0gxch7GsrMRwwi65jXQ41cJ/bw4uAggRdfvwE4GnPcqXbJLZiMBG1VGjMI"
+
+runtime:
+    runtime_requests: "runtime_requests"
+    runtime_responses: "runtime_responses"
+    registry_topic: "agent_registry"
+    subscription_topic: "agent_subscription"
+    publish_topic: "worker2_publish"

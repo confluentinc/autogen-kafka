@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import uuid
 from asyncio import Future
 from typing import Dict, Callable, Awaitable, TypeVar, Any, Sequence, Mapping, Type
 
@@ -22,7 +23,6 @@ from autogen_kafka_extension.runtimes.services.subscription_service import Subsc
 
 T = TypeVar("T", bound=Agent)
 logger = logging.getLogger(__name__)
-
 
 class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRuntime):
     """
@@ -75,7 +75,6 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         _agent_manager: Manager for local agent instances
         _message_processor: Processor for incoming messages
         _pending_requests: Cache for pending request/response operations
-        _next_request_id: Counter for generating unique request IDs
     """
 
     def __init__(
@@ -138,7 +137,6 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         # Request/response handling
         self._pending_requests: Dict[str, Future[Any]] = {}
         self._pending_requests_lock = asyncio.Lock()
-        self._next_request_id = 0
 
     async def start_and_wait_for(self, timeout : int = 30):
         """
@@ -511,8 +509,7 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
             A unique string identifier for the request.
         """
         async with self._pending_requests_lock:
-            self._next_request_id += 1
-            return str(self._next_request_id)
+            return uuid.uuid4().hex
 
     async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
         """Callback for processing incoming Kafka records.
@@ -529,8 +526,6 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         self._background_task_manager.add_task(
             self._message_processor.process_request(cr.value, send)
         )
-
-        logger.error(f"Received unknown event type: {cr.value}. Expected 'CloudEvent' or 'Message'.")
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
         """Add one or more message serializers to the runtime.

@@ -32,6 +32,7 @@ from .agent import KafkaStreamingAgent
 from .memory import KafkaMemory, KafkaMemoryError, TopicDeletionTimeoutError
 from .runtimes import KafkaAgentRuntime, MessagingClient
 from .runtimes.services import SubscriptionService
+from .runtimes.kafka_agent_runtime_factory import KafkaAgentRuntimeFactory
 
 __version__ = "0.1.0"
 
@@ -44,6 +45,7 @@ __all__ = [
     "KafkaAgentRuntime",
     "MessagingClient",
     "SubscriptionService",
+    "KafkaAgentRuntimeFactory",
 
     # Configuration classes
     "SchemaRegistryConfig",

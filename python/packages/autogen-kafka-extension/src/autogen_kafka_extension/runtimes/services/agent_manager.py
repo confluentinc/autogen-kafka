@@ -131,7 +131,7 @@ class AgentManager:
         self._instantiated_agents[agent_id] = agent_instance
         return agent_id
     
-    async def get_agent(self, agent_id: AgentId) -> Agent:
+    async def get_agent(self, agent_id: AgentId) -> Agent | None:
         """Retrieve or instantiate an agent by its ID.
         
         This method first checks if an agent with the given ID is already instantiated
@@ -153,7 +153,7 @@ class AgentManager:
             return self._instantiated_agents[agent_id]
 
         if agent_id.type not in self._agent_factories:
-            raise ValueError(f"Agent with name {agent_id.type} not found.")
+            return None
 
         agent_factory = self._agent_factories[agent_id.type]
         agent = await self._invoke_agent_factory(agent_factory, agent_id)
