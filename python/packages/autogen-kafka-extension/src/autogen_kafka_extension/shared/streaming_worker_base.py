@@ -9,6 +9,7 @@ from kstreams import ConsumerRecord, Stream, Send
 from kstreams.serializers import Serializer
 from opentelemetry.trace import TracerProvider
 
+from .schema_utils import SchemaUtils
 from ..config.service_base_config import ServiceBaseConfig
 from .background_task_manager import BackgroundTaskManager
 from .events.events_serdes import EventSerializer
@@ -178,11 +179,19 @@ class StreamingWorkerBase(ABC, Generic[T]):
         self._kafka_config : KafkaConfig = config.kafka_config
         self._topic = topic
         self._name = name or type(self).__name__
-        
+
         # Initialize components
         self._background_task_manager = BackgroundTaskManager()
         self._service_manager = StreamingServiceManager(streaming_service, self._kafka_config)
         self._serialization_registry = serialization_registry or SerializationRegistry()
+
+        schema = schema_str if schema_str else SchemaUtils.get_schema_str(target_type)
+        # Make sure the schema is registered or upgraded
+        self._config.kafka_config.utils().register_or_upgrade_schema(topic = topic,
+                                                               for_key=False,
+                                                               schema_str=schema,
+                                                               schema_type="JSON")
+
 
         if monitoring is None:
             self._trace_helper = TraceHelper(tracer_provider=None,
@@ -293,6 +302,13 @@ class StreamingWorkerBase(ABC, Generic[T]):
                 print("Timeout: Not all stream consumers started")
             ```
         """
+        if timeout <= 0:
+            raise ValueError("Timeout must be a positive number")
+        if not self.is_started:
+            raise RuntimeError(f"Worker '{self._name}' is not started. Call start() before waiting for streams.")
+
+        logger.debug(f"Waiting for all streams to start for worker '{self._name}' with timeout {timeout} seconds")
+
         await self._ensure_started()
         return await self._service_manager.service.wait_for_streams_to_start(timeout, check_interval)
 

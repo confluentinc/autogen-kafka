@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Dict, cast
 
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 

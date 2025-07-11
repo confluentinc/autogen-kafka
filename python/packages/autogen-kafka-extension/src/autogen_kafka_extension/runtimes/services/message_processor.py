@@ -199,7 +199,7 @@ class MessageProcessor:
                 await send(
                     topic=self._config.response_topic,
                     value=response_message,
-                    key=request.recipient,
+                    key=request.request_id,
                     serializer=self._response_serializer
                 )
             except Exception as e:
@@ -208,6 +208,13 @@ class MessageProcessor:
     async def _process_request(self, request: RequestEvent, send: Send) -> None:
 
         recipient = request.recipient
+
+        # Get the recipient agent
+        rec_agent = await self._agent_manager.get_agent(recipient)
+        if rec_agent is None:
+            # The agent is not registered or not found, Ignore the request (Was not for this instance)
+            return
+
         sender = request.agent_id
         if sender is None:
             logger.info(f"Processing request from unknown source to {recipient}")
@@ -220,9 +227,6 @@ class MessageProcessor:
             type_name=request.payload_type,
             data_content_type=request.payload_format,
         )
-
-        # Get the recipient agent
-        rec_agent = await self._agent_manager.get_agent(recipient)
 
         message_context = MessageContext(
             sender=sender,
@@ -259,7 +263,7 @@ class MessageProcessor:
         await send(
             topic=self._config.response_topic,
             value=response_message,
-            key=recipient.__str__(),
+            key=request.request_id,
             serializer=self._response_serializer,
             headers={}
         )

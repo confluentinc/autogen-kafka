@@ -143,8 +143,8 @@ class KafkaAgentRuntimeConfig(ServiceBaseConfig):
         runtime_data = data.get(cls.config_key(), {})
         
         # Get worker topic names with defaults
-        request_topic = runtime_data.get('request_topic', 'runtime_requests')
-        response_topic = runtime_data.get('response_topic', 'runtime_responses')
+        request_topic = runtime_data.get('runtime_requests', 'runtime_requests')
+        response_topic = runtime_data.get('runtime_responses', 'runtime_responses')
         registry_topic = runtime_data.get('registry_topic', 'agent_registry')
         subscription_topic = runtime_data.get('subscription_topic', 'agent_subscriptions')
         publish_topic = runtime_data.get('publish_topic', 'agent_publishes')
@@ -167,8 +167,8 @@ class KafkaAgentRuntimeConfig(ServiceBaseConfig):
         
         # Validate worker-specific settings
         topics = {
-            "request_topic": self._request_topic,
-            "response_topic": self._response_topic,
+            "runtime_requests": self._request_topic,
+            "runtime_responses": self._response_topic,
             "registry_topic": self._registry_topic,
             "subscription_topic": self._subscription_topic,
             "publish_topic": self._publish_topic,

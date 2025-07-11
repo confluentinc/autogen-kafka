@@ -13,6 +13,6 @@ CREATE MODEL sentimentmodel
 
 -- Insert the response from the model
 
-INSERT INTO `simple_response_topic`
+INSERT INTO `agent_response_topic`
     SELECT s.key, s.id, ROW(p.sentiment) AS message, s.message_type
-    FROM `simple_request_topic` AS s, LATERAL TABLE (ML_PREDICT('sentimentmodel', `message`.`text`)) AS p(sentiment)
+    FROM `agent_request_topic` AS s, LATERAL TABLE (ML_PREDICT('sentimentmodel', `message`.`text`)) AS p(sentiment)

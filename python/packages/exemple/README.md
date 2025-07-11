@@ -298,17 +298,18 @@ class SentimentResponse(KafkaMessageType):
 
 ```python
 import pytest
-from packages.exemple.kafka_sample import KafkaSample
-from packages.exemple.events import SentimentRequest
+from packages.exemple.src.modules.kafka_sample import KafkaSample
+from packages.exemple.src.modules import SentimentRequest
+
 
 @pytest.mark.asyncio
 async def test_kafka_sample():
     sample = KafkaSample()
     await sample.start()
-    
+
     response = await sample.get_sentiment("test text")
     assert response.sentiment is not None
-    
+
     await sample.stop()
 ```
 

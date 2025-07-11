@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
+import uuid
 from asyncio import Future
-from typing import Any, Mapping, Dict, cast
+from typing import Any, Mapping, Dict
 
 from autogen_core import MessageContext, BaseAgent, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, try_get_known_serializers_for_type
@@ -67,7 +68,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
                                      config=config,
                                      topic=config.response_topic,
                                      target_type=AgentEvent,
-                                     schema_str = self._get_schema(self._response_type))
+                                     schema_str = AgentEvent.wrap_schema(self._response_type))
         
         # Initialize the message serialization registry for handling different message types
         self._serialization_registry = SerializationRegistry()
@@ -78,9 +79,6 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         
         # Async lock to ensure thread-safe access to pending requests
         self._pending_requests_lock = asyncio.Lock()
-        
-        # Counter for generating unique request IDs (monotonically increasing)
-        self._next_request_id = 0
         
         # Manager for handling background tasks (e.g., sending messages)
         self._background_task_manager = BackgroundTaskManager()
@@ -93,7 +91,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             topic=config.request_topic,
             source_type=AgentEvent,
             kafka_utils=config.kafka_config.utils(),
-            schema_str=self._get_schema(self._request_type)
+            schema_str=AgentEvent.wrap_schema(self._request_type)
         )
 
         # Start the agent
@@ -182,10 +180,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
             - next_request_id: The current request ID counter to avoid ID collisions after restart
         """
         # Use lock to ensure consistent state capture
-        async with self._pending_requests_lock:
-            return {
-                "next_request_id": self._next_request_id
-            }
+        return {}
 
     async def load_state(self, state: Mapping[str, Any]) -> None:
         """Load a previously saved state into the agent.
@@ -200,15 +195,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
                   Expected keys:
                   - next_request_id: The request ID counter to restore
         """
-        # Use lock to ensure thread-safe state restoration
-        async with self._pending_requests_lock:
-            # Restore the request ID counter, ensuring it's at least as high as the saved value
-            # to avoid ID collisions
-            saved_request_id = state.get("next_request_id", 0)
-            self._next_request_id = max(self._next_request_id, saved_request_id)
-            
-            # Note: We don't restore _pending_requests as those are runtime Future objects
-            # that cannot be meaningfully serialized. They will be rebuilt as new requests come in.
+        pass
 
     async def close(self) -> None:
         """Close the agent and release all resources.
@@ -231,17 +218,6 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         # Wait for all background tasks to complete before closing
         await self._background_task_manager.wait_for_completion()
 
-    @staticmethod
-    def _get_schema(obj_type: type[KafkaMessageType | BaseModel]) -> str:
-        if issubclass(obj_type, BaseModel):
-            message_schema = obj_type.model_json_schema()
-        else:
-            message_schema = json.loads(obj_type.__schema__())
-
-        agent_schema : Dict[str, str] = json.loads(AgentEvent.__schema__())
-        cast(Dict[str, str], agent_schema["properties"])["message"] = message_schema
-        return json.dumps(agent_schema)
-
     async def _get_new_request_id(self) -> str:
         """Generate a new unique request ID for correlating requests and responses.
         
@@ -254,8 +230,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         """
         # Use lock to ensure thread-safe ID generation
         async with self._pending_requests_lock:
-            self._next_request_id += 1
-            return str(self._next_request_id)
+           return uuid.uuid4().__str__()
 
     async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
         """Handle incoming Kafka events and resolve corresponding request futures.
