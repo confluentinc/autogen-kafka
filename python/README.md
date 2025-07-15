@@ -92,7 +92,7 @@ pipenv install -e .[dev]
 
 The extension provides three main components for distributed agent communication:
 
-### 1. Agent Runtime (`KafkaWorkerAgentRuntime`)
+### 1. Agent Runtime (`KafkaAgentRuntime`)
 A distributed agent runtime that enables agents to communicate across multiple processes and machines through Kafka topics.
 
 ### 2. Streaming Agent (`KafkaStreamingAgent`) 
@@ -120,43 +120,44 @@ This starts:
 
 ### 2. Run the Complete Sample Application
 
-The `packages/exemple/` directory contains a complete sample application that demonstrates a **distributed sentiment analysis system** using:
-- **AutoGen Kafka Extension** for the client-side agent
-- **Confluent Cloud** for messaging infrastructure  
-- **Flink SQL** for the remote sentiment analysis agent
+The `packages/exemple/autogen-kafka-extension-sample/` directory contains a complete sample application that demonstrates a **distributed sentiment analysis system** using:
+- **AutoGen Kafka Extension** for distributed agent communication
+- **Kafka** for message streaming between agents
+- **File-based Configuration** using YAML configuration files
+- **Multiple Agent Runtimes** coordinating across different processes
 
 ```bash
-cd packages/exemple
+cd packages/exemple/autogen-kafka-extension-sample/src
 python main.py
 ```
 
 **What the sample demonstrates:**
-- **Runtime Selection**: Choose between Kafka and GRPC at startup
-- **Distributed Processing**: Local agent communicates with remote Flink SQL agent
-- **Cloud Integration**: Uses Confluent Cloud for scalable messaging
-- **AI Integration**: Remote agent uses OpenAI for sentiment analysis
-- **Interactive Processing**: Input text for sentiment analysis
-- **Proper Lifecycle**: Handles startup, processing, and shutdown
+- **Multi-Runtime Architecture**: Creates separate Flink and Forwarding runtimes
+- **File-based Configuration**: Loads configuration from YAML files using `KafkaAgentRuntimeFactory`
+- **Agent Communication**: Distributed agents communicate via Kafka topics
+- **Message Type Safety**: Uses strongly-typed `SentimentRequest` and `SentimentResponse` messages
+- **Interactive Processing**: Command-line interface for sentiment analysis
+- **Proper Lifecycle**: Handles runtime startup, agent registration, and shutdown
 
-**Sample Configuration** (`sample.config.yml`):
+**Sample Configuration** (`config_worker1.yml`):
 ```yaml
 kafka:
     name: "simple_kafka"
-    bootstrap_servers: "[YOUR_CONFLUENT_CLOUD_BOOTSTRAP_SERVERS]:9092"
-    group_id: "simple_group_abc"
-    client_id: "simple_client_abc"
-    sasl_plain_username: "[YOUR_CONFLUENT_CLOUD_API_KEY]"
-    sasl_plain_password: "[YOUR_CONFLUENT_CLOUD_API_SECRET]"
+    bootstrap_servers: "your-cluster.region.provider.confluent.cloud:9092"
+    group_id: "your-consumer-group"
+    client_id: "your-client-id"
+    sasl_plain_username: "YOUR_CONFLUENT_CLOUD_API_KEY"
+    sasl_plain_password: "YOUR_CONFLUENT_CLOUD_API_SECRET"
     security_protocol: "SASL_SSL"
     sasl_mechanism: "PLAIN"
     schema_registry:
-        url: "[YOUR_CONFLUENT_CLOUD_SCHEMA_REGISTRY_URL]"
-        api_key: "[YOUR_SCHEMA_REGISTRY_API_KEY]"
-        api_secret: "[YOUR_SCHEMA_REGISTRY_API_SECRET]"
+        url: "https://your-schema-registry.region.provider.confluent.cloud"
+        api_key: "YOUR_SCHEMA_REGISTRY_API_KEY"
+        api_secret: "YOUR_SCHEMA_REGISTRY_API_SECRET"
     
 agent:
-    request_topic: "simple_request_topic"
-    response_topic: "simple_response_topic"
+    request_topic: "agent_request_topic"
+    response_topic: "agent_response_topic"
     
 runtime:
     runtime_requests: "runtime_requests"
@@ -168,42 +169,35 @@ runtime:
 
 **Sample Application Structure:**
 ```
-packages/exemple/
-├── main.py                # Main application entry point
-├── sample.py              # Base Sample class (abstract)
-├── kafka_sample.py        # Kafka runtime implementation
-├── grpcs_sample.py        # GRPC runtime implementation
-├── events.py              # Message type definitions
-├── sample.config.yml      # Configuration file
-└── flink.sql              # Flink SQL job for remote agent
+packages/exemple/autogen-kafka-extension-sample/
+├── src/
+│   ├── main.py                # Main application entry point
+│   ├── config_worker1.yml     # Configuration for Flink runtime
+│   ├── config_worker2.yml     # Configuration for Forwarding runtime
+│   ├── agent_config.yml       # Additional agent configuration
+│   ├── flink.sql              # Flink SQL job definition
+│   ├── modules/               # Agent implementations and message types
+│   │   ├── events.py          # SentimentRequest/Response definitions
+│   │   └── forwarding_agent.py # Agent implementation
+│   └── README.md              # Sample-specific documentation
+└── pyproject.toml             # Package configuration
 ```
 
 **Key Features:**
-- **Distributed Architecture**: Local client + remote Flink SQL agent
-- **Cloud Native**: Built for Confluent Cloud and Flink
-- **AI-Powered**: Uses OpenAI for sentiment analysis
-- **Type-Safe Messages**: Define request/response types with JSON schema
-- **Configuration Management**: External YAML configuration with validation
-- **Interactive Interface**: Command-line interface for testing
+- **Factory Pattern**: Uses `KafkaAgentRuntimeFactory.create_runtime_from_file()` for configuration
+- **Multi-Process Coordination**: Multiple runtimes communicate via Kafka
+- **Type-Safe Messages**: `SentimentRequest`/`SentimentResponse` with JSON schema validation
+- **YAML Configuration**: External configuration files with placeholder credentials
+- **Agent Registration**: Demonstrates factory-based and instance-based agent registration
 
 ### 3. Basic Agent Runtime Setup
 
+#### File-based Configuration (Recommended)
+
 ```python
 import asyncio
-from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeFactory
 from autogen_core import BaseAgent, MessageContext
-
-# Configure the runtime
-config = WorkerConfig(
-    name="my-worker",
-    group_id="agent-group",
-    client_id="agent-client-1",
-    bootstrap_servers=["localhost:9092"],
-    request_topic="agent-requests",
-    response_topic="agent-responses"
-)
-
 
 # Create a simple agent
 class EchoAgent(BaseAgent):
@@ -213,10 +207,9 @@ class EchoAgent(BaseAgent):
     async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
         return f"Echo: {message}"
 
-
 async def main():
-    # Create and start the runtime
-    runtime = KafkaWorkerAgentRuntime(config)
+    # Create runtime from configuration file
+    runtime = await KafkaAgentRuntimeFactory.create_runtime_from_file("config.yml")
 
     # Register agent factory
     await runtime.register_factory("echo_agent", EchoAgent)
@@ -230,6 +223,80 @@ async def main():
     finally:
         await runtime.stop()
 
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+**Configuration File** (`config.yml`):
+```yaml
+kafka:
+    name: "my-worker"
+    bootstrap_servers: "localhost:9092"
+    group_id: "agent-group"
+    client_id: "agent-client-1"
+    schema_registry:
+        url: "http://localhost:8081"
+
+runtime:
+    runtime_requests: "agent-requests"
+    runtime_responses: "agent-responses" 
+    registry_topic: "agent-registry"
+    subscription_topic: "agent-subscription"
+    publish_topic: "publish"
+```
+
+#### Programmatic Configuration
+
+```python
+import asyncio
+from autogen_kafka_extension import KafkaAgentRuntime, KafkaAgentRuntimeConfig, KafkaConfig, SchemaRegistryConfig
+from autogen_core import BaseAgent, MessageContext
+
+# Configure the runtime
+schema_registry_config = SchemaRegistryConfig(
+    url="http://localhost:8081"
+)
+
+kafka_config = KafkaConfig(
+    name="my-worker",
+    group_id="agent-group", 
+    client_id="agent-client-1",
+    bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+config = KafkaAgentRuntimeConfig(
+    kafka_config=kafka_config,
+    request_topic="agent-requests",
+    response_topic="agent-responses",
+    registry_topic="agent-registry",
+    subscription_topic="agent-subscription",
+    publish_topic="publish"
+)
+
+# Create a simple agent
+class EchoAgent(BaseAgent):
+    def __init__(self):
+        super().__init__("Echo Agent")
+
+    async def on_message_impl(self, message: str, ctx: MessageContext) -> str:
+        return f"Echo: {message}"
+
+async def main():
+    # Create and start the runtime
+    runtime = KafkaAgentRuntime(config)
+
+    # Register agent factory
+    await runtime.register_factory("echo_agent", EchoAgent)
+
+    # Start the runtime
+    await runtime.start()
+
+    try:
+        # Runtime processes messages until stopped
+        await asyncio.Event().wait()
+    finally:
+        await runtime.stop()
 
 if __name__ == "__main__":
     asyncio.run(main())
@@ -239,28 +306,56 @@ if __name__ == "__main__":
 
 ```python
 import asyncio
-from autogen_kafka_extension.agent.kafka_streaming_agent import KafkaStreamingAgent
-from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
-from autogen_kafka_extension.runtimes.kafka_agent_runtime import KafkaWorkerAgentRuntime
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension import (
+    KafkaStreamingAgent, KafkaAgentConfig, KafkaAgentRuntime, 
+    KafkaAgentRuntimeConfig, KafkaConfig, SchemaRegistryConfig
+)
+from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
 from autogen_core import BaseAgent, MessageContext, AgentId
+from dataclasses import dataclass
+
+# Define message types for the bridge agent
+@dataclass
+class SentimentRequest(KafkaMessageType):
+    text: str
+
+@dataclass  
+class SentimentResponse(KafkaMessageType):
+    sentiment: str
 
 # Configure the runtime
-runtime_config = WorkerConfig(
+schema_registry_config = SchemaRegistryConfig(
+    url="http://localhost:8081"
+)
+
+kafka_config = KafkaConfig(
     name="my-worker",
     group_id="agent-group",
     client_id="agent-client-1",
     bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+runtime_config = KafkaAgentRuntimeConfig(
+    kafka_config=kafka_config,
     request_topic="agent-requests",
-    response_topic="agent-responses"
+    response_topic="agent-responses",
+    registry_topic="agent-registry",
+    subscription_topic="agent-subscription",
+    publish_topic="publish"
 )
 
 # Configure the Kafka bridge agent to connect to external Kafka service
-kafka_bridge_config = KafkaAgentConfig(
+bridge_kafka_config = KafkaConfig(
     name="external-service-bridge",
     group_id="bridge-group",
     client_id="bridge-client",
     bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+kafka_bridge_config = KafkaAgentConfig(
+    kafka_config=bridge_kafka_config,
     request_topic="external-service-requests",  # Topic to send requests to external service
     response_topic="external-service-responses"  # Topic to receive responses from external service
 )
@@ -291,7 +386,7 @@ class DataProcessor(BaseAgent):
 
 async def main():
     # Create the runtime
-    runtime = KafkaWorkerAgentRuntime(runtime_config)
+    runtime = KafkaAgentRuntime(runtime_config)
 
     # Register regular AutoGen agents
     await runtime.register_factory("data_processor", DataProcessor)
@@ -329,9 +424,9 @@ if __name__ == "__main__":
 **Important:** The `KafkaStreamingAgent` constructor now requires explicit type parameters:
 
 ```python
-from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
-from dataclasses import dataclass
+from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig, KafkaConfig, SchemaRegistryConfig
 from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+from dataclasses import dataclass
 
 # Define your message types
 @dataclass
@@ -341,6 +436,21 @@ class MyRequest(KafkaMessageType):
 @dataclass
 class MyResponse(KafkaMessageType):
     result: str
+
+# Configure the agent
+schema_registry_config = SchemaRegistryConfig(url="http://localhost:8081")
+kafka_config = KafkaConfig(
+    name="my-streaming-agent",
+    group_id="streaming-group",
+    client_id="streaming-client",
+    bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+config = KafkaAgentConfig(
+    kafka_config=kafka_config,
+    request_topic="my-requests",
+    response_topic="my-responses"
+)
 
 # Create agent with required type parameters
 agent = KafkaStreamingAgent(
@@ -357,16 +467,21 @@ agent = KafkaStreamingAgent(
 
 ```python
 import asyncio
-from autogen_kafka_extension.memory.kafka_memory import KafkaMemory
-from autogen_kafka_extension.memory.memory_config import MemoryConfig
+from autogen_kafka_extension import KafkaMemory, KafkaMemoryConfig, KafkaConfig, SchemaRegistryConfig
 from autogen_core.memory import MemoryContent
 
 # Configure distributed memory
-config = MemoryConfig(
+schema_registry_config = SchemaRegistryConfig(url="http://localhost:8081")
+kafka_config = KafkaConfig(
     name="shared-memory",
-    group_id="memory-group",
+    group_id="memory-group", 
     client_id="memory-client",
     bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+config = KafkaMemoryConfig(
+    kafka_config=kafka_config,
     memory_topic="shared-memory-topic"
 )
 
@@ -395,21 +510,28 @@ if __name__ == "__main__":
 
 ## ⚙️ Configuration
 
-### WorkerConfig
+### KafkaAgentRuntimeConfig
 
 Core configuration for the agent runtime:
 
 ```python
-from autogen_kafka_extension.runtimes.worker_config import WorkerConfig
+from autogen_kafka_extension import KafkaAgentRuntimeConfig, KafkaConfig, SchemaRegistryConfig
 from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
-config = WorkerConfig(
+# Schema Registry configuration
+schema_registry_config = SchemaRegistryConfig(
+    url="http://localhost:8081",
+    api_key="your-api-key",
+    api_secret="your-api-secret"
+)
+
+# Core Kafka configuration
+kafka_config = KafkaConfig(
     name="my-worker",
     group_id="agent-group",
-    client_id="agent-client-1",
+    client_id="agent-client-1", 
     bootstrap_servers=["localhost:9092"],
-    request_topic="agent-requests",
-    response_topic="agent-responses",
+    schema_registry_config=schema_registry_config,
     
     # Optional Kafka settings
     num_partitions=3,
@@ -422,6 +544,16 @@ config = WorkerConfig(
     sasl_plain_username="your-username",
     sasl_plain_password="your-password"
 )
+
+# Agent runtime configuration
+config = KafkaAgentRuntimeConfig(
+    kafka_config=kafka_config,
+    request_topic="agent-requests",
+    response_topic="agent-responses", 
+    registry_topic="agent-registry",
+    subscription_topic="agent-subscription",
+    publish_topic="publish"
+)
 ```
 
 ### KafkaAgentConfig
@@ -429,30 +561,50 @@ config = WorkerConfig(
 Configuration for streaming agents:
 
 ```python
-from autogen_kafka_extension.agent.kafka_agent_config import KafkaAgentConfig
+from autogen_kafka_extension import KafkaAgentConfig, KafkaConfig, SchemaRegistryConfig
 
-config = KafkaAgentConfig(
+# Schema Registry configuration
+schema_registry_config = SchemaRegistryConfig(url="http://localhost:8081")
+
+# Kafka configuration
+kafka_config = KafkaConfig(
     name="streaming-agent",
     group_id="streaming-group",
-    client_id="streaming-client", 
+    client_id="streaming-client",
     bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+# Agent configuration
+config = KafkaAgentConfig(
+    kafka_config=kafka_config,
     request_topic="agent-input",
     response_topic="agent-output"
 )
 ```
 
-### MemoryConfig
+### KafkaMemoryConfig
 
 Configuration for distributed memory:
 
 ```python
-from autogen_kafka_extension.memory.memory_config import MemoryConfig
+from autogen_kafka_extension import KafkaMemoryConfig, KafkaConfig, SchemaRegistryConfig
 
-config = MemoryConfig(
+# Schema Registry configuration  
+schema_registry_config = SchemaRegistryConfig(url="http://localhost:8081")
+
+# Kafka configuration
+kafka_config = KafkaConfig(
     name="distributed-memory",
     group_id="memory-group",
-    client_id="memory-client",
+    client_id="memory-client", 
     bootstrap_servers=["localhost:9092"],
+    schema_registry_config=schema_registry_config
+)
+
+# Memory configuration
+config = KafkaMemoryConfig(
+    kafka_config=kafka_config,
     memory_topic="shared-memory"
 )
 ```
@@ -489,6 +641,9 @@ The extension uses CloudEvents-compatible event schemas:
 Run the test suite:
 
 ```bash
+# Navigate to the extension directory
+cd packages/autogen-kafka-extension
+
 # Run all tests (as configured in the project)
 PYTHONPATH=tests:src uv run python -m pytest tests/test_agent_runtime.py tests/test_kafka_memory.py tests/test_kafka_streaming_agent.py -v
 
@@ -562,6 +717,9 @@ cloudevents = ">=1.12.0"         # CloudEvents support
 ### Building and Publishing
 
 ```bash
+# Navigate to the extension directory
+cd packages/autogen-kafka-extension
+
 # Build the package
 uv build
 
@@ -649,7 +807,7 @@ logging.basicConfig(
 )
 
 # The extension uses loggers for different components:
-# - autogen_kafka_extension.runtimes.worker_runtime
+# - autogen_kafka_extension.runtimes.kafka_agent_runtime
 # - autogen_kafka_extension.agent.kafka_streaming_agent  
 # - autogen_kafka_extension.memory.kafka_memory
 ```
