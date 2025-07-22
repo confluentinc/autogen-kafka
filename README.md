@@ -2,474 +2,335 @@
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
-A scalable, event-driven runtime extension for [Microsoft AutoGen](https://github.com/microsoft/autogen) that enables autonomous agents to communicate over Apache Kafka. This extension provides distributed agent communication capabilities supporting message-based patterns including pub/sub and RPC-style interactions across multiple programming languages.
+A scalable, event-driven extension for [Microsoft AutoGen](https://github.com/microsoft/autogen) that enables **distributed multi-agent systems** using Apache Kafka. Break free from single-machine limitations and build agent systems that scale across multiple processes, machines, and even programming languages.
 
-## 🚀 Key Features
+## 🤔 What Problem Does This Solve?
 
-- **Event-Driven Architecture**: Built on Apache Kafka for scalable, distributed agent communication
-- **Multi-Language Support**: Extensible architecture supporting multiple programming languages
-- **Agent Lifecycle Management**: Dynamic registration and management of agent factories and instances
-- **Multiple Communication Patterns**: Support for both pub/sub and RPC-style messaging
-- **Distributed Memory**: Kafka-based memory implementation for sharing state across agent instances
-- **Streaming Processing**: Asynchronous event processing for high-throughput scenarios
-- **Schema Support**: Standardized message serialization with CloudEvents support
-- **Observability**: Integrated tracing and monitoring capabilities
-- **Fault Tolerance**: Robust error handling and recovery mechanisms
+**Standard AutoGen Problem**: Your agents are stuck on one machine. If you want multiple agents to collaborate across different processes, machines, or with external services, you're out of luck.
 
-## 🏗 Architecture Overview
+**Our Solution**: This extension provides three key building blocks to create truly distributed agent systems:
 
-The Autogen Kafka Extension implements a distributed agent runtime that leverages Apache Kafka's streaming capabilities to enable:
+## 🏗️ Core Components Explained
 
-- **Horizontal Scaling**: Agents can be distributed across multiple instances and locations
-- **Loose Coupling**: Agents communicate through well-defined message contracts
-- **Event Sourcing**: All interactions are captured as immutable events
-- **Resilience**: Built-in fault tolerance and recovery mechanisms
-- **Language Agnostic**: Core patterns can be implemented across different programming languages
+### 1. 🏃‍♂️ **Agent Runtime** - Distributed Agent Coordination
+**What it is**: A distributed coordination system that allows AutoGen agents running on different machines to find each other and communicate seamlessly.
 
-## 📦 Project Structure
+**When to use**:
+- You have agents that need to run on separate machines (e.g., different cloud instances)
+- You want to scale your agent system horizontally 
+- You need agents in different programming languages to work together
+- You want fault-tolerant agent systems where some agents can fail without breaking everything
 
-```
-autogen-kafka/
-├── .github/                             # GitHub workflows and settings
-├── python/                              # Python implementation
-│   ├── packages/
-│   │   └── autogen-kafka-extension/     # Core Python extension package
-│   │       ├── src/
-│   │       │   └── autogen_kafka_extension/
-│   │       │       ├── agent/                       # Agent implementations
-│   │       │       │   ├── kafka_streaming_agent.py # Direct Kafka streaming agent
-│   │       │       │   ├── kafka_agent_config.py   # Agent configuration classes
-│   │       │       │   └── event/                  # Agent event definitions
-│   │       │       │       ├── agent_event.py      # Core agent event structure
-│   │       │       │       └── agent_event_serdes.py # Event serialization
-│   │       │       ├── memory/                      # Distributed memory implementation
-│   │       │       │   ├── kafka_memory.py         # Kafka-based memory provider
-│   │       │       │   └── memory_config.py        # Memory configuration
-│   │       │       ├── runtimes/                   # Agent runtime implementations
-│   │       │       │   ├── worker_runtime.py       # Main Kafka worker runtime
-│   │       │       │   ├── worker_config.py        # Worker configuration classes
-│   │       │       │   ├── messaging_client.py     # Kafka messaging client
-│   │       │       │   └── services/               # Runtime service components
-│   │       │       │       ├── agent_manager.py    # Agent lifecycle management
-│   │       │       │       ├── agent_registry.py   # Agent registration management
-│   │       │       │       ├── message_processor.py # Message processing logic
-│   │       │       │       └── subscription_service.py # Subscription management
-│   │       │       ├── shared/                     # Shared components and utilities
-│   │       │       │   ├── events/                 # Event definitions and serialization
-│   │       │       │   │   ├── memory_event.py     # Memory synchronization events
-│   │       │       │   │   ├── request_event.py    # Agent request events
-│   │       │       │   │   ├── response_event.py   # Agent response events
-│   │       │       │   │   ├── registration_event.py # Agent registration events
-│   │       │       │   │   └── subscription_event.py # Subscription events
-│   │       │       │   ├── kafka_config.py         # Base Kafka configuration
-│   │       │       │   ├── streaming_service.py    # Kafka streaming service
-│   │       │       │   ├── streaming_worker_base.py # Base streaming worker class
-│   │       │       │   └── topic_admin_service.py  # Topic administration
-│   │       │       └── py.typed                    # Type hints marker
-│   │       ├── tests/                   # Package tests
-│   │       │   ├── test_kafka_memory.py # Memory implementation tests
-│   │       │   ├── test_worker_runtime.py # Runtime tests
-│   │       │   └── utils.py            # Test utilities
-│   │       └── pyproject.toml          # Package configuration
-│   └── README.md                       # Python-specific implementation guide
-├── dotnet/                             # Future C# implementation
-├── docs/                               # Architecture and design documentation
-├── examples/                           # Cross-language usage examples
-├── docker-compose.yml                  # Kafka development environment
-├── service.yml                         # Service configuration
-├── CHANGELOG.md                        # Version history
-├── LICENSE                             # Apache 2.0 License
-└── README.md                          # This file
+**Real example**: 
+```python
+# Machine 1: Data processing agents
+runtime_1 = KafkaAgentRuntime(config_machine_1)
+await runtime_1.register_factory("data_processor", DataProcessorAgent)
+
+# Machine 2: Analysis agents  
+runtime_2 = KafkaAgentRuntime(config_machine_2)
+await runtime_2.register_factory("data_analyzer", AnalyzerAgent)
+
+# Agents can now communicate across machines automatically
+await runtime_1.send_message(
+    message=ProcessRequest(data="sales_data.csv"),
+    recipient=AgentId(type="data_analyzer", key="default")
+)
 ```
 
-## 🌍 Language Support
+### 2. 🌉 **Streaming Agent** - External System Bridge
+**What it is**: A special agent that acts as a bridge between your AutoGen agents and external Kafka-based services or systems.
 
-### Current Implementations
+**When to use**:
+- You want to connect AutoGen agents with external microservices
+- You need to integrate with existing Kafka-based systems  
+- You want to expose AutoGen capabilities to non-AutoGen applications
+- You're building hybrid architectures (some AutoGen, some external services)
 
-- **Python** (`python/`): Full-featured implementation with comprehensive agent runtime
-  - AutoGen integration via `KafkaWorkerAgentRuntime`
-  - Direct agent communication with `KafkaStreamingAgent`
-  - Kafka Streams processing with `kstreams`
-  - CloudEvents support and OpenTelemetry tracing
-  - See [Python README](python/README.md) for detailed usage
+**Real example**:
+```python
+# Bridge to external sentiment analysis service
+sentiment_bridge = KafkaStreamingAgent(
+    config=bridge_config,
+    description="External sentiment analysis service",
+    request_type=SentimentRequest,  # What you send
+    response_type=SentimentResponse  # What you get back
+)
 
-### Planned Implementations
+# Now your AutoGen agents can use external services transparently
+response = await sentiment_bridge.send_message(
+    SentimentRequest(text="I love this product!")
+)
+# response.sentiment == "positive" (from external service)
+```
 
-- **C#** (`dotnet/`): Planned implementation for .NET ecosystems
+### 3. 🧠 **Distributed Memory** - Shared Agent Memory
+**What it is**: A memory system that keeps agent memory synchronized across multiple instances using Kafka, so all agents share the same conversation history and context.
 
-## 🚀 Core Concepts
+**When to use**:
+- You have multiple instances of the same agent type
+- You need conversation history to persist across agent restarts
+- You want different agent instances to learn from each other's interactions
+- You're building stateful agent systems that need to remember past conversations
 
-### Agent Runtime
+**Real example**:
+```python
+# All customer service agents share the same memory
+shared_memory = KafkaMemory(config, session_id="customer_service")
 
-The extension provides language-specific implementations of agent runtimes that:
-- Register and manage agent lifecycles
-- Route messages between agents via Kafka topics
-- Handle both synchronous (RPC) and asynchronous (pub/sub) communication patterns
-- Provide observability and error handling
+# Agent instance 1 learns something
+await shared_memory.add("Customer John prefers email contact")
 
-### Kafka Streaming Agent
+# Agent instance 2 (on different machine) instantly knows this
+query_result = await shared_memory.query("John contact preference")
+# Returns: "Customer John prefers email contact"
+```
 
-The `KafkaStreamingAgent` provides a direct Kafka-based communication layer for AutoGen agents:
-- **Direct Kafka Integration**: Agents communicate directly through Kafka topics without additional runtime layers
-- **Request-Response Correlation**: Built-in correlation mechanism for synchronous message patterns
-- **Event-Driven Processing**: Asynchronous message handling with Kafka Streams integration
-- **Serialization Support**: Automatic message serialization/deserialization with AutoGen's serialization registry
-- **Background Task Management**: Non-blocking message sending with background task coordination
-- **Configurable Topics**: Separate request and response topics for organized message flow
-- **Type-Safe Messages**: Requires explicit request and response type definitions for compile-time safety
+## 🚀 Quick Start Examples
 
-### Message Patterns
+### Example 1: Multi-Machine Agent System
+```python
+# Deploy these on different machines with same Kafka cluster
 
-- **Direct Messaging**: Point-to-point communication between specific agents
-- **Topic Broadcasting**: Publish-subscribe patterns for event distribution
-- **Request-Response**: RPC-style interactions with response correlation
-- **Event Streaming**: Continuous processing of event streams
+# machine_1.py - Specialized for data processing
+runtime = KafkaAgentRuntime(config)
+await runtime.register_factory("data_processor", DataProcessor)
+await runtime.start()
 
-### Distributed Memory
+# machine_2.py - Specialized for analysis  
+runtime = KafkaAgentRuntime(config)
+await runtime.register_factory("analyzer", AnalyzerAgent)
+await runtime.start()
 
-The extension provides a Kafka-based memory implementation (`KafkaMemory`) that enables:
-- **Shared State**: Memory content synchronized across multiple agent instances
-- **Session Isolation**: Each memory session uses dedicated Kafka topics for isolation
-- **Persistence**: Memory state persisted in Kafka topics for durability
-- **Event Synchronization**: Real-time memory updates broadcast to all instances
-- **Flexible Backend**: Wraps existing memory implementations (e.g., `ListMemory`)
+# machine_3.py - Orchestrator
+runtime = KafkaAgentRuntime(config)
+# Can send work to any agent on any machine
+result = await runtime.send_message(
+    ProcessRequest(data="financial_data.xlsx"),
+    recipient=AgentId("data_processor", "default")
+)
+```
 
-### Configuration Management
+### Example 2: Hybrid Architecture (AutoGen + External Services)
+```python
+# Connect AutoGen agents with external ML service
+class MLServiceBridge(KafkaStreamingAgent):
+    async def on_message_impl(self, message, ctx):
+        # Forward to external ML service via Kafka
+        return await self.call_external_service(message)
 
-- Environment-specific configurations for Kafka connectivity
-- Topic and partition management
-- Consumer group and scaling strategies
-- Security and authentication settings
+# Use in your agent workflow
+class BusinessAgent(Agent):
+    async def process_request(self, data):
+        # Use external ML service through the bridge
+        ml_result = await self.send_message(
+            MLRequest(data=data),
+            recipient=AgentId("ml_service_bridge", "default")
+        )
+        return self.make_business_decision(ml_result)
+```
 
-## 📋 Requirements
+### Example 3: Scalable Customer Service
+```python
+# Multiple customer service agents sharing memory
+class CustomerServiceAgent(Agent):
+    def __init__(self):
+        # Shared memory across all customer service instances
+        self.memory = KafkaMemory(config, session_id="customer_service")
+    
+    async def handle_customer(self, customer_id, question):
+        # Check what we know about this customer
+        history = await self.memory.query(f"customer {customer_id}")
+        
+        # Process with context
+        response = await self.process_with_history(question, history)
+        
+        # Remember for next time (all instances will know)
+        await self.memory.add(f"Customer {customer_id}: {question} -> {response}")
+        
+        return response
 
-### Infrastructure
-- **Apache Kafka**: Version 2.8+ (local cluster or managed service)
-- **ZooKeeper**: If using older Kafka versions
-- **Container Runtime**: Docker for local development (optional)
+# Deploy multiple instances - they all share the same memory
+```
 
-### Language-Specific Requirements
-- **Python**: 3.10+ with AutoGen Core dependencies
-- **C#**: .NET 6+ (planned)
+## 🔄 Architecture Patterns
 
-## 🏃 Getting Started
+### Pattern 1: Microservices with Agents
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│   User Service  │    │  Order Service  │    │Payment Service  │
+│                 │    │                 │    │                 │
+│ ┌─────────────┐ │    │ ┌─────────────┐ │    │ ┌─────────────┐ │
+│ │AutoGen Agent│ │    │ │AutoGen Agent│ │    │ │AutoGen Agent│ │
+│ └─────────────┘ │    │ └─────────────┘ │    │ └─────────────┘ │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+        │                        │                        │
+        └────────────────────────┼────────────────────────┘
+                                 │
+                        ┌─────────────────┐
+                        │  Kafka Runtime  │
+                        │   (Coordinator) │
+                        └─────────────────┘
+```
 
-### 1. Infrastructure Setup
+### Pattern 2: Hybrid AI Pipeline
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│  AutoGen Agents │    │ Streaming Agent │    │External ML/API  │
+│   (Reasoning)   │────┤     (Bridge)    │────┤   Services      │
+│                 │    │                 │    │                 │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+```
 
-**For the included sample application**, set up Confluent Cloud:
+### Pattern 3: Multi-Language Agent System
+```
+┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
+│ Python Agents   │    │    C# Agents    │    │   JS Agents     │
+│                 │    │                 │    │                 │
+│ KafkaRuntime    │    │ KafkaRuntime    │    │ KafkaRuntime    │
+│ (Python)        │    │ (.NET - Future) │    │ (Future)        │
+└─────────────────┘    └─────────────────┘    └─────────────────┘
+        │                        │                        │
+        └────────────────────────┼────────────────────────┘
+                                 │
+                           Kafka Cluster
+                      (Language-agnostic messaging)
+```
 
-1. **Create a Confluent Cloud account** and Kafka cluster
-2. **Set up Schema Registry** with API keys
-3. **Create required topics** in your cluster
-4. **Deploy the Flink SQL job** for the remote sentiment analysis agent
-
-**For local development**, start a local Kafka cluster:
+## 📦 Installation
 
 ```bash
-# Using the provided Docker Compose
+# Basic installation
+uv add autogen-kafka-extension
+
+# Development installation
+git clone https://github.com/microsoft/autogen-kafka.git
+cd autogen-kafka/python/packages/autogen-kafka-extension
+uv pip install -e .[dev]
+```
+
+## 🛠️ Setup Requirements
+
+### Prerequisites
+- **Python 3.10+** with [uv](https://docs.astral.sh/uv/) package manager (recommended)
+- **Kafka cluster** (local or cloud)
+
+### Kafka Infrastructure
+You need a Kafka cluster (local or cloud):
+
+**Option 1: Local Development**
+```bash
+# Quick start with Docker
 docker-compose up -d
 ```
 
-Or configure connection to your existing Kafka infrastructure.
+**Option 2: Confluent Cloud (Recommended for production)**
+- Create Confluent Cloud account
+- Set up Kafka cluster and Schema Registry
+- Configure API keys
 
-### 2. Choose Your Implementation
-
-#### Python
-Navigate to the Python implementation:
-
+### Quick Setup with uv
 ```bash
-cd python
+# Clone and setup the project
+git clone https://github.com/microsoft/autogen-kafka.git
+cd autogen-kafka/python/packages/exemple
+uv sync  # Install all dependencies
+python main.py  # Run the example
 ```
 
-Follow the [Python README](python/README.md) for detailed setup and usage instructions.
+### Configuration
+Create your configuration file:
 
-#### Other Languages
-Additional language implementations are planned. Check the respective directories when available.
+```yaml
+# config.yml
+kafka:
+  bootstrap_servers: "localhost:9092"  # or your cloud broker
+  group_id: "my_agent_group"
+  
+runtime:
+  runtime_requests: "agent_requests"
+  runtime_responses: "agent_responses" 
+  registry_topic: "agent_registry"
+  subscription_topic: "subscriptions"
+  publish_topic: "agent_messages"
+```
 
-### 3. Basic Concepts
+## 📊 When to Use Each Component
 
-All implementations follow these core patterns:
+| Component | Use When | Don't Use When |
+|-----------|----------|----------------|
+| **Runtime** | • Multiple machines<br>• Horizontal scaling<br>• Cross-language agents<br>• Fault tolerance | • Single machine<br>• Simple agent chat<br>• No scaling needed |
+| **Streaming Agent** | • External service integration<br>• Kafka-based systems<br>• Hybrid architectures<br>• Non-AutoGen services | • Pure AutoGen workflows<br>• No external dependencies<br>• Simple agent-to-agent chat |
+| **Distributed Memory** | • Multiple agent instances<br>• Shared state needed<br>• Persistent conversations<br>• Cross-instance learning | • Single agent instance<br>• No shared state<br>• Ephemeral conversations |
 
-1. **Runtime Configuration**: Configure Kafka connectivity and topics
-2. **Agent Registration**: Register agent factories and instances
-3. **Message Handling**: Implement agents that process incoming messages
-4. **Communication**: Use direct messaging or topic publishing for agent interaction
+## 🧪 Live Example
 
-### 4. Practical Usage Examples
+We provide a complete working example:
 
-The project includes complete sample applications in `python/packages/exemple/` that demonstrate both Kafka and GRPC runtime usage:
-
-#### Quick Start with Sample Application
-
-```python
-# Run the interactive distributed sentiment analysis sample
+```bash
 cd python/packages/exemple
+uv sync  # Install dependencies
 python main.py
 ```
 
-The sample application demonstrates a **distributed sentiment analysis system**:
-- **Local Agent**: Python application using AutoGen Kafka Extension
-- **Remote Agent**: Flink SQL job with OpenAI integration
-- **Cloud Infrastructure**: Confluent Cloud for messaging
-- **Interactive Interface**: Input text for sentiment analysis
-- **Runtime Selection**: Choose between Kafka and GRPC at startup
+This demonstrates:
+- **Distributed agents** (one local Python, one remote Flink)
+- **External service integration** (OpenAI via Flink SQL)
+- **Real-time messaging** (sentiment analysis pipeline)
+- **Production setup** (Confluent Cloud infrastructure)
 
-#### Creating Your Own Agent Application
+## 🗂️ Project Structure
 
-**Step 1: Define Message Types**
-
-```python
-from dataclasses import dataclass
-from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
-
-@dataclass
-class SentimentRequest(KafkaMessageType):
-    text: str
-
-@dataclass
-class SentimentResponse(KafkaMessageType):
-    sentiment: str
+```
+autogen-kafka/
+├── python/packages/autogen-kafka-extension/
+│   ├── src/autogen_kafka_extension/
+│   │   ├── runtimes/           # 🏃‍♂️ Distributed coordination
+│   │   │   ├── kafka_agent_runtime.py
+│   │   │   └── services/       # Agent discovery, messaging, subscriptions
+│   │   ├── agent/              # 🌉 External system bridges  
+│   │   │   └── kafka_streaming_agent.py
+│   │   ├── memory/             # 🧠 Distributed memory
+│   │   │   └── kafka_memory.py
+│   │   └── config/             # Configuration management
+│   └── tests/
+├── python/packages/exemple/    # Working examples
+└── docs/                       # Detailed documentation
 ```
 
-**Step 2: Create Configuration File**
+## 🤝 Contributing
 
-```yaml
-kafka:
-    name: "my_agent_runtime"
-    bootstrap_servers: "localhost:9092"
-    group_id: "my_group"
-    client_id: "my_client"
-    
-agent:
-    request_topic: "agent_requests"
-    response_topic: "agent_responses"
-    
-runtime:
-    runtime_requests: "runtime_requests"
-    runtime_responses: "runtime_responses"
-    registry_topic: "agent_registry"
-    subscription_topic: "agent_subscription"
-    publish_topic: "publish"
+This project welcomes contributions:
+
+1. **Core Architecture**: Message protocols, event schemas
+2. **Language Implementations**: C#, JavaScript, Java runtimes  
+3. **Integration Examples**: Real-world usage patterns
+4. **Documentation**: Guides, tutorials, API docs
+
+### Development Setup
+```bash
+# Fork the repo and clone your fork
+git clone https://github.com/your-username/autogen-kafka.git
+cd autogen-kafka
+
+# Install development dependencies with uv
+cd python/packages/autogen-kafka-extension
+uv pip install -e .[dev]
+
+# Run tests
+pytest
 ```
-
-**Step 3: Implement Your Agent Wrapper**
-
-```python
-from abc import ABC, abstractmethod
-from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
-
-class AgentBase(ABC):
-    def __init__(self, runtime):
-        self._agent_config = KafkaAgentConfig.from_file("config.yml")
-        self._runtime = runtime
-    
-    def is_running(self) -> bool:
-        return self._runtime is not None and self._runtime.is_running()
-    
-    async def new_agent(self):
-        agent = KafkaStreamingAgent(
-            config=self._agent_config,
-            description="My custom agent",
-            request_type=SentimentRequest,
-            response_type=SentimentResponse,
-        )
-        await agent.start()
-        await agent.wait_for_streams_to_start()
-        return agent
-    
-    async def start(self):
-        await self._start()
-        # Register serializers and agent factory
-        await self._runtime.register_factory("my_agent", self.new_agent)
-    
-    async def get_sentiment(self, text: str) -> SentimentResponse:
-        response = await self._runtime.send_message(
-            message=SentimentRequest(text),
-            recipient=AgentId(type="my_agent", key="default")
-        )
-        return response
-    
-    @abstractmethod
-    async def _start(self):
-        pass
-    
-    @abstractmethod
-    async def stop(self):
-        pass
-```
-
-**Step 4: Choose Runtime Implementation**
-
-```python
-# Kafka Runtime
-from autogen_kafka_extension import KafkaAgentRuntime, KafkaAgentRuntimeConfig
-
-class KafkaAgentApp(AgentBase):
-    def __init__(self):
-        config = KafkaAgentRuntimeConfig.from_file("config.yml")
-        runtime = KafkaAgentRuntime(config=config)
-        super().__init__(runtime=runtime)
-    
-    async def _start(self):
-        await self._runtime.start_and_wait_for()
-    
-    async def stop(self):
-        if self._runtime:
-            await self._runtime.stop()
-
-# GRPC Runtime
-from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime
-
-class GrpcAgentApp(AgentBase):
-    def __init__(self):
-        runtime = GrpcWorkerAgentRuntime("localhost:50051")
-        super().__init__(runtime=runtime)
-    
-    async def _start(self):
-        await self._runtime.start()
-    
-    async def stop(self):
-        await self._runtime.stop()
-```
-
-**Step 5: Build Your Application**
-
-```python
-import asyncio
-import aiorun
-
-class Application:
-    def __init__(self):
-        self.agent_app = None
-    
-    async def start(self):
-        # Choose runtime
-        runtime_choice = input("Select runtime (Kafka/GRPC): ")
-        
-        if runtime_choice.upper() == "GRPC":
-            self.agent_app = GrpcAgentApp()
-        else:
-            self.agent_app = KafkaAgentApp()
-        
-        await self.agent_app.start()
-        
-        # Interactive loop
-        while True:
-            text = input("Enter text for analysis (or 'exit'): ")
-            if text == "exit":
-                break
-                
-            result = await self.agent_app.get_sentiment(text)
-            print(f"Result: {result.sentiment}")
-        
-        await self.agent_app.stop()
-    
-    async def shutdown(self, loop):
-        if self.agent_app and self.agent_app.is_running():
-            await self.agent_app.stop()
-
-if __name__ == "__main__":
-    app = Application()
-    aiorun.run(app.start(), stop_on_unhandled_errors=True, 
-               shutdown_callback=app.shutdown)
-```
-
-This pattern provides:
-- **Flexibility**: Easy switching between different runtimes
-- **Scalability**: Horizontal scaling with Kafka runtime
-- **Maintainability**: Clear separation of concerns
-- **Extensibility**: Easy to add new runtime types or modify behavior
-
-## 🛠 Development
-
-### Contributing
-
-This repository welcomes contributions across all language implementations:
-
-1. **Architecture**: Core patterns and message schemas
-2. **Implementation**: Language-specific runtime implementations
-3. **Documentation**: Usage guides and architectural decisions
-4. **Testing**: Integration and performance testing
-5. **Examples**: Cross-language demonstration scenarios
-
-### Development Workflow
-
-1. Fork the repository
-2. Create a feature branch
-3. Implement changes with appropriate tests
-4. Ensure compatibility with existing message formats
-5. Submit a pull request with clear documentation
-
-### Testing
-
-Each language implementation includes:
-- Unit tests for core functionality
-- Integration tests with real Kafka clusters
-- Performance benchmarks
-- Cross-language compatibility tests
-
-## 📊 Monitoring and Observability
-
-The extension provides comprehensive observability:
-
-- **Distributed Tracing**: OpenTelemetry integration for message flow tracking
-- **Metrics**: Agent performance and message throughput monitoring
-- **Logging**: Structured logging for debugging and audit trails
-- **Health Checks**: Runtime and dependency health monitoring
-
-## 🔧 Configuration
-
-### Kafka Topics
-
-The extension uses standardized topic naming conventions:
-- `agent.requests` - Direct agent messaging
-- `agent.responses` - Response correlation
-- `agent.subscription` - Agent subscription events
-- `agent.registry` - Agent lifecycle events
-- `agent_request` - KafkaStreamingAgent request topic (configurable)
-- `agent_response` - KafkaStreamingAgent response topic (configurable)
-- `memory.<session_id>` - Distributed memory synchronization (per session)
-
-### Message Formats
-
-All implementations use CloudEvents-compatible message formats for:
-- Cross-language compatibility
-- Schema evolution support
-- Observability integration
-- Standard tooling compatibility
-
-## 📈 Roadmap
-
-- [x] Complete Python implementation with full AutoGen integration
-- [x] Kafka-based distributed memory implementation
-- [ ] Schema registry integration
-- [ ] Agent state persistence enhancements
-- [ ] Comprehensive documentation and examples
-- [ ] C# implementation planning and design
-- [ ] C# implementation with .NET AutoGen integration
-- [ ] Cross-language message format standardization
-- [ ] Advanced observability and monitoring tools
-- [ ] Performance optimization and benchmarking
 
 ## 📄 License
 
-This project is licensed under the Apache License 2.0 - see the [LICENSE](LICENSE) file for details.
-
-## 🤝 Support & Community
-
-- **Issues**: Report bugs and request features via GitHub Issues
-- **Discussions**: Join architectural discussions in GitHub Discussions
-- **Documentation**: Language-specific guides in respective directories
-- **AutoGen Community**: Connect with the broader AutoGen ecosystem
-- **Kafka Resources**: [Apache Kafka Documentation](https://kafka.apache.org/documentation/)
+Apache License 2.0 - see [LICENSE](LICENSE) file.
 
 ## 🔗 Related Projects
 
 - [Microsoft AutoGen](https://github.com/microsoft/autogen) - Core agent framework
-- [Apache Kafka](https://kafka.apache.org/) - Distributed streaming platform
-- [CloudEvents](https://cloudevents.io/) - Event specification standard
-- [OpenTelemetry](https://opentelemetry.io/) - Observability framework
+- [Apache Kafka](https://kafka.apache.org/) - Distributed streaming platform  
+- [Confluent Cloud](https://confluent.cloud/) - Managed Kafka service
 
 ---
 
-**Note**: This is an extension for Microsoft AutoGen. Familiarity with [core AutoGen concepts](https://github.com/microsoft/autogen) is recommended before using this Kafka extension.
+**Ready to scale your agents?** Start with our [quick examples](python/packages/exemple/) or dive into the [detailed documentation](python/packages/autogen-kafka-extension/docs/).
