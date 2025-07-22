@@ -29,7 +29,7 @@ This directory contains a complete sample application demonstrating how to use t
 
 3. **Install Dependencies**:
    ```bash
-   cd python/packages/exemple
+   cd python/packages/example
    uv sync
    ```
 

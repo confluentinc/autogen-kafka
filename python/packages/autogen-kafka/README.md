@@ -20,41 +20,41 @@ A Python extension for [Microsoft AutoGen](https://github.com/microsoft/autogen)
 ### Using uv (Recommended)
 
 ```bash
-uv add autogen-kafka-extension
+uv add autogen-kafka
 ```
 
 ### Using pip
 
 ```bash
-pip install autogen-kafka-extension
+pip install autogen-kafka
 ```
 
 ### Using Poetry
 
 ```bash
-poetry add autogen-kafka-extension
+poetry add autogen-kafka
 ```
 
 ### Using conda/mamba
 
 ```bash
 # Note: Package may need to be available on conda-forge
-conda install -c conda-forge autogen-kafka-extension
+conda install -c conda-forge autogen-kafka
 # or
-mamba install -c conda-forge autogen-kafka-extension
+mamba install -c conda-forge autogen-kafka
 ```
 
 ### Using pipenv
 
 ```bash
-pipenv install autogen-kafka-extension
+pipenv install autogen-kafka
 ```
 
 ### From Source
 
 ```bash
-git clone https://github.com/microsoft/autogen-kafka.git
-cd autogen-kafka/python/packages/autogen-kafka-extension
+git clone https://github.com/confluentinc/autogen-kafka.git
+cd autogen-kafka/python/packages/autogen-kafka
 
 # Using uv (recommended)
 uv pip install -e .
@@ -72,8 +72,8 @@ pipenv install -e .
 ### Development Installation
 
 ```bash
-git clone https://github.com/microsoft/autogen-kafka.git
-cd autogen-kafka/python/packages/autogen-kafka-extension
+git clone https://github.com/confluentinc/autogen-kafka.git
+cd autogen-kafka/python/packages/autogen-kafka
 
 # Using uv (recommended)
 uv pip install -e .[dev]
@@ -126,7 +126,7 @@ The `packages/exemple/` directory contains a complete sample application that de
 - **Flink SQL** for the remote sentiment analysis agent
 
 ```bash
-cd packages/exemple
+cd packages/example
 python main.py
 ```
 
@@ -168,7 +168,7 @@ runtime:
 
 **Sample Application Structure:**
 ```
-packages/exemple/
+packages/example/
 ├── main.py                # Main application entry point
 ├── sample.py              # Base Sample class (abstract)
 ├── kafka_sample.py        # Kafka runtime implementation
@@ -532,7 +532,7 @@ def kafka_container():
 ### Project Structure
 
 ```
-src/autogen_kafka_extension/
+src/autogen_kafka/
 ├── agent/                      # Streaming agent implementations
 │   ├── event/                  # Agent event definitions
 │   ├── kafka_agent_config.py   # Agent configuration
