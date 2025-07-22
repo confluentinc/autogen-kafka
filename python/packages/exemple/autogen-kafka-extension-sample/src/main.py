@@ -4,7 +4,7 @@ import pathlib
 import aiorun
 from autogen_core import Agent, try_get_known_serializers_for_type, AgentId
 
-from autogen_kafka_extension import KafkaAgentRuntimeFactory, KafkaStreamingAgent, KafkaAgentConfig, KafkaAgentRuntime
+from autogen_kafka import KafkaAgentRuntimeFactory, KafkaStreamingAgent, KafkaAgentConfig, KafkaAgentRuntime
 from src.modules import SentimentRequest, SentimentResponse
 from src.modules.forwarding_agent import ForwardingAgent
 

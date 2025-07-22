@@ -101,7 +101,7 @@ A bridge agent that exposes Kafka topics as AutoGen agents, allowing AutoGen age
 ### 3. Distributed Memory (`KafkaMemory`)
 A memory implementation that synchronizes state across multiple agent instances using dedicated Kafka topics.
 
-For detailed architecture documentation, see [docs/api/README.md](packages/autogen-kafka/docs/api/README.md).
+For detailed architecture documentation, see [docs/api/README.md](docs/api/README.md).
 
 ## 🚀 Quick Start
 

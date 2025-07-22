@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+from autogen_kafka.agent.kafka_message_type import KafkaMessageType
 
 
 @dataclass

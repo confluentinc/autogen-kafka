@@ -5,7 +5,7 @@ Welcome to the comprehensive documentation for the AutoGen Kafka Extension. This
 ## 📖 Documentation Structure
 
 ### 🚀 Getting Started
-- **[Main README](../../../README.md)** - Installation, quick start, and basic examples
+- **[Main README](../README.md)** - Installation, quick start, and basic examples
 - **[API Overview](api/README.md)** - Comprehensive API documentation and architecture overview
 
 ### 🏗️ Development
