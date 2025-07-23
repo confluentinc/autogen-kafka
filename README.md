@@ -91,7 +91,7 @@ autogen-kafka/
   - Direct agent communication with `KafkaStreamingAgent`
   - Kafka Streams processing with `kstreams`
   - CloudEvents support and OpenTelemetry tracing
-  - See [Python README](python/README.md) for detailed usage
+  - See [Python README](python/packages/autogen-kafka/README.md) for detailed usage
 
 ### Planned Implementations
 
@@ -181,7 +181,7 @@ Navigate to the Python implementation:
 cd python
 ```
 
-Follow the [Python README](python/README.md) for detailed setup and usage instructions.
+Follow the [Python README](python/packages/autogen-kafka/README.md) for detailed setup and usage instructions.
 
 #### Other Languages
 Additional language implementations are planned. Check the respective directories when available.
@@ -220,15 +220,17 @@ The sample application demonstrates a **distributed sentiment analysis system**:
 
 ```python
 from dataclasses import dataclass
-from autogen_kafka_extension.agent.kafka_message_type import KafkaMessageType
+from autogen_kafka.agent.kafka_message_type import KafkaMessageType
+
 
 @dataclass
 class SentimentRequest(KafkaMessageType):
-    text: str
+  text: str
+
 
 @dataclass
 class SentimentResponse(KafkaMessageType):
-    sentiment: str
+  sentiment: str
 ```
 
 **Step 2: Create Configuration File**
@@ -256,80 +258,84 @@ runtime:
 
 ```python
 from abc import ABC, abstractmethod
-from autogen_kafka_extension import KafkaStreamingAgent, KafkaAgentConfig
+from autogen_kafka import KafkaStreamingAgent, KafkaAgentConfig
+
 
 class AgentBase(ABC):
-    def __init__(self, runtime):
-        self._agent_config = KafkaAgentConfig.from_file("config.yml")
-        self._runtime = runtime
-    
-    def is_running(self) -> bool:
-        return self._runtime is not None and self._runtime.is_running()
-    
-    async def new_agent(self):
-        agent = KafkaStreamingAgent(
-            config=self._agent_config,
-            description="My custom agent",
-            request_type=SentimentRequest,
-            response_type=SentimentResponse,
-        )
-        await agent.start()
-        await agent.wait_for_streams_to_start()
-        return agent
-    
-    async def start(self):
-        await self._start()
-        # Register serializers and agent factory
-        await self._runtime.register_factory("my_agent", self.new_agent)
-    
-    async def get_sentiment(self, text: str) -> SentimentResponse:
-        response = await self._runtime.send_message(
-            message=SentimentRequest(text),
-            recipient=AgentId(type="my_agent", key="default")
-        )
-        return response
-    
-    @abstractmethod
-    async def _start(self):
-        pass
-    
-    @abstractmethod
-    async def stop(self):
-        pass
+  def __init__(self, runtime):
+    self._agent_config = KafkaAgentConfig.from_file("config.yml")
+    self._runtime = runtime
+
+  def is_running(self) -> bool:
+    return self._runtime is not None and self._runtime.is_running()
+
+  async def new_agent(self):
+    agent = KafkaStreamingAgent(
+      config=self._agent_config,
+      description="My custom agent",
+      request_type=SentimentRequest,
+      response_type=SentimentResponse,
+    )
+    await agent.start()
+    await agent.wait_for_streams_to_start()
+    return agent
+
+  async def start(self):
+    await self._start()
+    # Register serializers and agent factory
+    await self._runtime.register_factory("my_agent", self.new_agent)
+
+  async def get_sentiment(self, text: str) -> SentimentResponse:
+    response = await self._runtime.send_message(
+      message=SentimentRequest(text),
+      recipient=AgentId(type="my_agent", key="default")
+    )
+    return response
+
+  @abstractmethod
+  async def _start(self):
+    pass
+
+  @abstractmethod
+  async def stop(self):
+    pass
 ```
 
 **Step 4: Choose Runtime Implementation**
 
 ```python
 # Kafka Runtime
-from autogen_kafka_extension import KafkaAgentRuntime, KafkaAgentRuntimeConfig
+from autogen_kafka import KafkaAgentRuntime, KafkaAgentRuntimeConfig
+
 
 class KafkaAgentApp(AgentBase):
-    def __init__(self):
-        config = KafkaAgentRuntimeConfig.from_file("config.yml")
-        runtime = KafkaAgentRuntime(config=config)
-        super().__init__(runtime=runtime)
-    
-    async def _start(self):
-        await self._runtime.start_and_wait_for()
-    
-    async def stop(self):
-        if self._runtime:
-            await self._runtime.stop()
+  def __init__(self):
+    config = KafkaAgentRuntimeConfig.from_file("config.yml")
+    runtime = KafkaAgentRuntime(config=config)
+    super().__init__(runtime=runtime)
+
+  async def _start(self):
+    await self._runtime.start_and_wait_for()
+
+  async def stop(self):
+    if self._runtime:
+      await self._runtime.stop()
+
 
 # GRPC Runtime
 from autogen_ext.runtimes.grpc import GrpcWorkerAgentRuntime
 
+
 class GrpcAgentApp(AgentBase):
-    def __init__(self):
-        runtime = GrpcWorkerAgentRuntime("localhost:50051")
-        super().__init__(runtime=runtime)
-    
-    async def _start(self):
-        await self._runtime.start()
-    
-    async def stop(self):
-        await self._runtime.stop()
+  def __init__(self):
+    runtime = GrpcWorkerAgentRuntime("localhost:50051")
+    super().__init__(runtime=runtime)
+
+  async def _start(self):
+    await self._runtime.start()
+
+  async def stop(self):
+    await self._runtime.stop()
 ```
 
 **Step 5: Build Your Application**
