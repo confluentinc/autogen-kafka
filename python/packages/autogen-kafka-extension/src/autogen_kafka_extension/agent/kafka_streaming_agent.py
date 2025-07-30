@@ -7,14 +7,16 @@ from typing import Any, Mapping, Dict
 
 from autogen_core import MessageContext, BaseAgent, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, try_get_known_serializers_for_type
-from kstreams import ConsumerRecord, Stream, Send
 from pydantic import BaseModel
 
 from .kafka_message_type import KafkaMessageType
 from ..config.agent_config import KafkaAgentConfig
 from .event.agent_event import AgentEvent
+from ..shared import MessageProducer
 from ..shared.background_task_manager import BackgroundTaskManager
+from ..shared.consumer_record import ConsumerRecord
 from ..shared.events.events_serdes import EventSerializer
+from ..shared.stream import Stream
 from ..shared.streaming_worker_base import StreamingWorkerBase
 
 
@@ -232,7 +234,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         async with self._pending_requests_lock:
            return uuid.uuid4().__str__()
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """Handle incoming Kafka events and resolve corresponding request futures.
         
         This method is called when a Kafka record is received from the subscribed topic.
@@ -242,7 +244,7 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
         Args:
             record: The Kafka ConsumerRecord containing the event data
             stream: The Kafka stream instance for stream processing operations
-            send: The send function for producing messages back to Kafka topics
+            producer: The send function for producing messages back to Kafka topics
         """
         # Validate that the record contains a value
         if record.value is None:

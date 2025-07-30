@@ -1,6 +1,4 @@
-from typing import Optional, Dict, cast
-
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
+from typing import Optional
 
 from .topic_admin_service import TopicAdminService
 from .schema_registry_service import SchemaRegistryService
@@ -17,10 +15,10 @@ class KafkaUtils(SchemaRegistryService, TopicAdminService):
         num_partitions: int = 3,
         replication_factor: int = 1,
         is_compacted: bool = False,
-        security_protocol: Optional[SecurityProtocol] = None,
-        security_mechanism: Optional[SaslMechanism] = None,
-        sasl_plain_username: Optional[str] = None,
-        sasl_plain_password: Optional[str] = None):
+        security_protocol: str | None = None,
+        security_mechanism: str | None = None,
+        sasl_plain_username: str | None = None,
+        sasl_plain_password: str | None = None):
 
         SchemaRegistryService.__init__(self, schema_registry_config)
         TopicAdminService.__init__(self, bootstrap_servers=bootstrap_servers,

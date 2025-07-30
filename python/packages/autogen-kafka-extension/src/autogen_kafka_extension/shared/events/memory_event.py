@@ -89,7 +89,7 @@ class MemoryEvent(EventBase):
             raise ValueError("Missing 'mime_type' in data")
 
         content = data.get("content")
-        metadata = json.loads(data.get("metadata"))
+        metadata = json.loads(data.get("metadata")) if data.get("metadata") else None
 
         decoded_content = None
         if mime_type in [MemoryMimeType.TEXT, MemoryMimeType.MARKDOWN]:

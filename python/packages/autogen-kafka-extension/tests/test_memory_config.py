@@ -3,11 +3,9 @@
 import json
 import os
 import tempfile
-from pathlib import Path
 import pytest
 
 from autogen_kafka_extension.config import KafkaMemoryConfig, SchemaRegistryConfig
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 
 class TestKafkaMemoryConfig:
@@ -48,7 +46,7 @@ class TestKafkaMemoryConfig:
         assert memory_config.kafka_config.replication_factor == 2
         assert memory_config.kafka_config.is_compacted == False
         assert memory_config.kafka_config.auto_offset_reset == "earliest"
-        assert memory_config.kafka_config.security_protocol == SecurityProtocol.PLAINTEXT
+        assert memory_config.kafka_config.security_protocol == "PLAINTEXT"
         assert memory_config.kafka_config.sasl_plain_username == "test-username"
         assert memory_config.kafka_config.sasl_plain_password == "test-password"
         

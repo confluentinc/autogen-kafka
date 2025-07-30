@@ -2,7 +2,6 @@ import asyncio
 from typing import Optional
 import pytest
 from autogen_core.memory import MemoryContent, MemoryMimeType, ListMemory
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 from testcontainers.core.waiting_utils import wait_for_logs
@@ -455,8 +454,8 @@ class TestKafkaSMemory:
         """Helper function to create a MemoryConfig with standard settings."""
         return KafkaMemoryConfig(
             name=f"{name}_{group_suffix}_{client_suffix}",
-            security_protocol=SecurityProtocol.PLAINTEXT,
-            security_mechanism=SaslMechanism.PLAIN,
+            security_protocol="PLAINTEXT",
+            security_mechanism="PLAIN",
             bootstrap_servers=[connection],
             group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
             client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",

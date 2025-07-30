@@ -24,7 +24,6 @@ class Application:
             console_handler = logging.StreamHandler()
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             console_handler.setFormatter(formatter)
-            logger.addHandler(console_handler)
 
         print("[+] Create and start Flink runtime instance...")
         self.flink_runtime = await KafkaAgentRuntimeFactory.create_runtime_from_file(f"{pathlib.Path(__file__).parent.resolve()}/config_worker1.yml")
@@ -60,7 +59,7 @@ class Application:
 
         await self.flink_runtime.stop()
         await self.forwarder_runtime.stop()
-        quit()
+        exit()
 
     async def shutdown(self, loop):
         logger.info("Shutting down instance...")

@@ -10,12 +10,12 @@ from autogen_core import (
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper, get_telemetry_grpc_metadata
 from azure.core.messaging import CloudEvent
-from kstreams import Send
 
 from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
+from autogen_kafka_extension.shared import MessageProducer
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.events.response_event import ResponseEvent
@@ -140,7 +140,7 @@ class MessageProcessor:
         except BaseException as e:
             logger.error("Error handling event", exc_info=e)
 
-    async def process_request(self, request: RequestEvent, send: Send) -> None:
+    async def process_request(self, request: RequestEvent, send: MessageProducer) -> None:
         """Process an incoming request message, invoke the agent, and send a response.
 
         This method handles direct agent-to-agent RPC requests by:
@@ -196,7 +196,7 @@ class MessageProcessor:
                 metadata=get_telemetry_grpc_metadata()
             )
             try:
-                await send(
+                await send.send(
                     topic=self._config.response_topic,
                     value=response_message,
                     key=request.request_id,
@@ -205,7 +205,7 @@ class MessageProcessor:
             except Exception as e:
                 logger.error(f"Failed to send response message: {e}")
 
-    async def _process_request(self, request: RequestEvent, send: Send) -> None:
+    async def _process_request(self, request: RequestEvent, send: MessageProducer) -> None:
 
         recipient = request.recipient
 
@@ -260,7 +260,7 @@ class MessageProcessor:
             recipient=sender,
             metadata=get_telemetry_grpc_metadata(),
         )
-        await send(
+        await send.send(
             topic=self._config.response_topic,
             value=response_message,
             key=request.request_id,

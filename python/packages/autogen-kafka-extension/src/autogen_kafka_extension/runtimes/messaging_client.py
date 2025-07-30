@@ -8,16 +8,17 @@ from autogen_core import AgentId, TopicId, JSON_DATA_CONTENT_TYPE
 from autogen_core._serialization import SerializationRegistry, MessageSerializer
 from autogen_core._telemetry import get_telemetry_grpc_metadata, TraceHelper
 from azure.core.messaging import CloudEvent
-from kstreams import ConsumerRecord, Send, Stream
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import KafkaAgentRuntimeConfig
 from autogen_kafka_extension.runtimes.services import constants
+from autogen_kafka_extension.shared import MessageProducer
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
 from autogen_kafka_extension.shared.events.response_event import ResponseEvent
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.shared.streaming_service import StreamingService
+from autogen_kafka_extension.shared.stream import ConsumerRecord, Stream
 
 logger = logging.getLogger(__name__)
 
@@ -244,13 +245,13 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         async with self._pending_requests_lock:
             return uuid.uuid4().__str__()
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """Handle incoming response events from Kafka and resolve pending request futures.
         
         Args:
             record: The Kafka consumer record containing the response event
             stream: The Kafka stream instance
-            send: The send function for publishing messages
+            producer: The send function for publishing messages
         """
         if not isinstance(record.value, ResponseEvent):
             logger.error(f"Received non-ResponseEvent record: {record}. Expected 'ResponseEvent'.")

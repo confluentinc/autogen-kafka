@@ -5,12 +5,12 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
 from autogen_core import MessageContext, JSON_DATA_CONTENT_TYPE
-from kstreams import ConsumerRecord, Stream, Send
 from pydantic import BaseModel
 
 from autogen_kafka_extension import KafkaAgentConfig
 from autogen_kafka_extension.agent.kafka_streaming_agent import KafkaStreamingAgent
 from autogen_kafka_extension.agent.event.agent_event import AgentEvent
+from autogen_kafka_extension.shared.streaming_service import ConsumerRecord, Stream, Send
 
 
 @dataclass
@@ -242,7 +242,7 @@ class TestKafkaStreamingAgent:
         send = Mock(spec=Send)
         
         # Call the method
-        await agent._handle_event(record, stream, send)
+        await agent.handle_event(record, stream, send)
         
         # Verify the future was resolved with the correct result
         assert future.done()
@@ -297,7 +297,7 @@ class TestKafkaStreamingAgent:
         send = Mock(spec=Send)
         
         # Call the method (should not raise exception)
-        await agent._handle_event(record, stream, send)
+        await agent.handle_event(record, stream, send)
         
         # Verify no pending requests were affected
         assert len(agent._pending_requests) == 0
@@ -314,7 +314,7 @@ class TestKafkaStreamingAgent:
         send = Mock(spec=Send)
         
         # Call the method (should not raise exception)
-        await agent._handle_event(record, stream, send)
+        await agent.handle_event(record, stream, send)
         
         # Verify no pending requests were affected
         assert len(agent._pending_requests) == 0
@@ -331,7 +331,7 @@ class TestKafkaStreamingAgent:
         send = Mock(spec=Send)
         
         # Call the method (should not raise exception)
-        await agent._handle_event(record, stream, send)
+        await agent.handle_event(record, stream, send)
         
         # Verify no pending requests were affected
         assert len(agent._pending_requests) == 0
@@ -410,7 +410,7 @@ class TestKafkaStreamingAgent:
             stream = Mock(spec=Stream)
             send = Mock(spec=Send)
             
-            await agent._handle_event(record, stream, send)
+            await agent.handle_event(record, stream, send)
         
         # Process all events concurrently
         tasks = []

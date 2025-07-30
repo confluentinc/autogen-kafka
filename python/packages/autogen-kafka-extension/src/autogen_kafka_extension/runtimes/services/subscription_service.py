@@ -5,11 +5,13 @@ from autogen_core import Subscription, AgentId, TopicId
 from autogen_core._runtime_impl_helpers import SubscriptionManager
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper
-from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import KafkaAgentRuntimeConfig
+from autogen_kafka_extension.shared import MessageProducer
+from autogen_kafka_extension.shared.consumer_record import ConsumerRecord
 from autogen_kafka_extension.shared.events.events_serdes import EventSerializer
+from autogen_kafka_extension.shared.stream import Stream
 from autogen_kafka_extension.shared.streaming_service import StreamingService
 from autogen_kafka_extension.shared.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
@@ -251,7 +253,7 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             serializer=self._subscription_serializer
         )
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """
         Process incoming subscription events from other service instances.
         
@@ -261,7 +263,7 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         Args:
             record (ConsumerRecord): The Kafka consumer record containing the subscription event
             stream (Stream): The Kafka stream context
-            send (Send): The Kafka send context for producing messages
+            producer (Send): The Kafka send context for producing messages
         """
         if not isinstance(record.value, SubscriptionEvent):
             logger.error(f"Received invalid subscription event type: {type(record.value)}")
@@ -271,10 +273,10 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
 
         try:
             if event.operation == SubscriptionEvtOp.ADDED:
-                await self._global_subscriptions.add_subscription(event.subscription)
+                self._global_subscriptions.add_subscription(event.subscription)
                 logger.debug(f"Processed subscription addition: {event.subscription}")
             elif event.operation == SubscriptionEvtOp.REMOVED:
-                await self._global_subscriptions.remove_subscription(event.subscription)
+                self._global_subscriptions.remove_subscription(event.subscription)
                 logger.debug(f"Processed subscription removal: {event.subscription}")
             else:
                 logger.error(f"Unknown subscription operation: {event.operation}")

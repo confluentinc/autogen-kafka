@@ -1,11 +1,8 @@
 import logging
 from typing import Optional, Dict, Any
 
-from kstreams import types, Stream
-from kstreams.middleware import BaseMiddleware
-from kstreams.serializers import Serializer
-
 from azure.core.messaging import CloudEvent
+from confluent_kafka import Message
 from confluent_kafka.schema_registry._sync.serde import BaseDeserializer
 from confluent_kafka.serialization import SerializationContext, MessageField
 
@@ -15,7 +12,7 @@ from .cloudevent_schema import get_cloudevent_json_schema_compact, \
 from ...config import KafkaUtils
 
 
-class EventDeserializer(BaseMiddleware):
+class EventDeserializer:
     """
     Middleware for deserializing Kafka ConsumerRecord values into Message objects.
     """
@@ -24,15 +21,9 @@ class EventDeserializer(BaseMiddleware):
         self,
         kafka_utils: KafkaUtils,
         target_type: type,
-        next_call: types.NextMiddlewareCall,
-        send: types.Send,
-        stream: "Stream",
         *,
         schema_str: str | None = None,
     ) -> None:
-        super().__init__(next_call=next_call,
-                         send=send,
-                         stream=stream)
         self._target_type = target_type
 
         if issubclass(target_type, EventBase):
@@ -50,22 +41,20 @@ class EventDeserializer(BaseMiddleware):
             from_dict=from_dict
         )
 
-    async def __call__(self, cr: types.ConsumerRecord) -> types.ConsumerRecord:
+    def deserialize(self, msg: Message) -> Any:
         # If the record has a value, decode it from bytes and parse as JSON
-        if cr.value is not None:
+        if msg.value() is not None:
             try:
-                cr.value = self._inner_deserializer(
-                    cr.value,
-                    ctx=SerializationContext(topic=cr.topic, field=MessageField.VALUE)
+                return self._inner_deserializer(
+                    msg.value(),
+                    ctx=SerializationContext(topic=msg.topic(), field=MessageField.VALUE)
                 )
-
             except ValueError as e:
-                logging.error(f"Failed to deserialize value {cr.value}: {e}")
+                logging.error(f"Failed to deserialize value: {e}")
                 raise ValueError(f"Failed to deserialize value: {e}") from e
-
-        # Pass the modified ConsumerRecord to the next middleware or handler
-        result = await self.next_call(cr)
-        return result if result is not None else cr
+            except Exception as e:
+                logging.error(f"Unexpected error deserializing value: {e}")
+                raise ValueError(f"Unexpected error deserializing value: {e}") from e
 
     def _dict_to_event_base(self, data: Dict, ctx: SerializationContext) -> EventBase:
         """
@@ -108,7 +97,7 @@ def _cloud_event_to_dict(obj: CloudEvent, ctx: SerializationContext) -> Dict:
     return cloud_event_to_dict(obj)
 
 
-class EventSerializer(Serializer):
+class EventSerializer:
     """
     Serializer for Message objects and generic payloads.
     Converts Message instances or other payloads to JSON-encoded bytes for Kafka.
@@ -141,8 +130,7 @@ class EventSerializer(Serializer):
     async def serialize(
         self,
         payload: Any,
-        headers: Optional[Dict[str, str]] = None,
-        serializer_kwargs: Optional[Dict] = None
+        headers: Optional[Dict[str, str]] = None
     ) -> bytes:
         """
         Serialize the payload to bytes.
@@ -150,7 +138,6 @@ class EventSerializer(Serializer):
         Args:
             payload: The object to serialize. If it's a Message, use its dict representation.
             headers: Optional headers for serialization (unused here).
-            serializer_kwargs: Optional extra arguments for serialization (unused here).
 
         Returns:
             bytes: The JSON-encoded payload as bytes.

@@ -8,7 +8,6 @@ from autogen_core import (
     AgentRuntime, Agent, AgentId, Subscription, TopicId, CancellationToken,
     AgentType, AgentMetadata, MessageSerializer,
 )
-from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka_extension import KafkaAgentRuntimeConfig
@@ -16,7 +15,9 @@ from autogen_kafka_extension.runtimes.messaging_client import MessagingClient
 from autogen_kafka_extension.runtimes.services.agent_registry import AgentRegistry
 from autogen_kafka_extension.runtimes.services.agent_manager import AgentManager
 from autogen_kafka_extension.runtimes.services.cloud_event_processor import CloudEventProcessor
+from autogen_kafka_extension.shared import MessageProducer
 from autogen_kafka_extension.shared.events.request_event import RequestEvent
+from autogen_kafka_extension.shared.stream import ConsumerRecord, Stream
 from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka_extension.runtimes.services.message_processor import MessageProcessor
 from autogen_kafka_extension.runtimes.services.subscription_service import SubscriptionService
@@ -123,11 +124,11 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         # Component managers
         self._agent_manager = AgentManager(self)
         self._message_processor = MessageProcessor(
-            self._agent_manager,
-            self._serialization_registry,
-            self._subscription_svc,
-            self._trace_helper,
-            self._config
+            agent_manager=self._agent_manager,
+            serialization_registry=self._serialization_registry,
+            subscription_service=self._subscription_svc,
+            trace_helper=self._trace_helper,
+            config=self._config
         )
 
         # Cloud event processor for handling CloudEvents
@@ -511,7 +512,7 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         async with self._pending_requests_lock:
             return uuid.uuid4().hex
 
-    async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """Callback for processing incoming Kafka records.
         
         Processes incoming Kafka consumer records by routing them to the appropriate
@@ -521,11 +522,14 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         Args:
             cr: The Kafka ConsumerRecord containing the message data and metadata.
             stream: The Kafka stream instance for stream processing operations.
-            send: The send function for producing messages back to Kafka topics.
+            producer: The send function for producing messages back to Kafka topics.
         """
-        self._background_task_manager.add_task(
-            self._message_processor.process_request(cr.value, send)
-        )
+        try:
+            self._background_task_manager.add_task(
+                self._message_processor.process_request(record.value, producer)
+            )
+        except Exception as e:
+            logger.error(f"Error processing record {record}: {e}")
 
     def add_message_serializer(self, serializer: MessageSerializer[Any] | Sequence[MessageSerializer[Any]]) -> None:
         """Add one or more message serializers to the runtime.

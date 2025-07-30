@@ -28,6 +28,8 @@ dependencies = [
     "aiorun>=2017.10.2",
     "grpcio>=1.70.0",
     "autogen-kafka-extension",
+    "autogen-agentchat>=0.6.1",
+    "openai>=1.97.0",
 ]
 
 [project.optional-dependencies]

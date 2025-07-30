@@ -194,7 +194,7 @@ class CustomService(StreamingWorkerBase):
     def __init__(self, config):
         super().__init__(config, "custom.topic", CustomEvent)
     
-    async def _handle_event(self, record, stream, send):
+    async async def _handle_event(self, record, stream, send):
         # Custom event handling logic
         pass
 ```
