@@ -14,7 +14,7 @@ class StreamingServiceConfig:
     enable_auto_commit: bool = True
     auto_create_topics: bool = True
 
-    def get_consumer_config(self) -> dict[str, Any]:
+    def get_consumer_config(self, topic: str) -> dict[str, Any]:
         """
         Get the Kafka consumer configuration dictionary.
 
@@ -30,8 +30,8 @@ class StreamingServiceConfig:
                 - enable_auto_commit: Auto-commit configuration
         """
         return {
-            "client_id": f"{self.client_id}",
-            "group_id": f"{self.group_id}",
+            "client_id": f"{self.client_id}-{topic}",
+            "group_id": f"{self.group_id}-{topic}",
             "auto_offset_reset": self.auto_offset_reset,
             "enable_auto_commit": self.enable_auto_commit
         }

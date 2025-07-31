@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 import warnings
 from typing import Dict, Any, Awaitable, List, Mapping
 
@@ -186,7 +187,7 @@ class MessageProcessor:
             ```
         """
         try:
-            return await self._process_request(request, send)
+            await self._process_request(request, send)
         except Exception as e:
             logger.error(f"Error processing request: {e}")
             # Send an error response if agent processing fails
@@ -206,64 +207,108 @@ class MessageProcessor:
                 logger.error(f"Failed to send response message: {e}")
 
     async def _process_request(self, request: RequestEvent, send: MessageProducer) -> None:
-
+        """Process an incoming request message, invoke the agent, and send a response."""
+        request_id = request.request_id
         recipient = request.recipient
-
-        # Get the recipient agent
-        rec_agent = await self._agent_manager.get_agent(recipient)
-        if rec_agent is None:
-            # The agent is not registered or not found, Ignore the request (Was not for this instance)
-            return
-
         sender = request.agent_id
-        if sender is None:
-            logger.info(f"Processing request from unknown source to {recipient}")
-        else:
-            logger.info(f"Processing request from {sender} to {recipient}")
 
-        # Deserialize the message payload
-        message = self._serialization_registry.deserialize(
-            request.payload,
-            type_name=request.payload_type,
-            data_content_type=request.payload_format,
-        )
+        try:
+            start_total = time.perf_counter()
+            if sender:
+                logger.info(f"[Request] {request_id} from {sender} to {recipient}")
+            else:
+                logger.info(f"[Request] {request_id} from unknown to {recipient}")
 
-        message_context = MessageContext(
-            sender=sender,
-            topic_id=None,
-            is_rpc=True,
-            cancellation_token=CancellationToken(),
-            message_id=request.request_id,
-        )
+            # Phase 1: Get agent
+            start = time.perf_counter()
+            rec_agent = await self._agent_manager.get_agent(recipient)
+            agent_lookup_time = time.perf_counter() - start
 
-        with MessageHandlerContext.populate_context(rec_agent.id):
-            with self._trace_helper.trace_block(
-                "process",
-                rec_agent.id,
-                parent=request.metadata,
-                attributes={"request_id": request.request_id},
-                extraAttributes={"message_type": request.payload_type},
-            ):
-                result = await rec_agent.on_message(message, ctx=message_context)
+            if rec_agent is None:
+                logger.warning(f"[Request] {request_id}: agent {recipient} not found (ignored)")
+                return
 
-        result_type = self._serialization_registry.type_name(result)
-        serialized_result = self._serialization_registry.serialize(
-            result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
-        )
+            # Phase 2: Deserialize
+            start = time.perf_counter()
+            message = self._serialization_registry.deserialize(
+                request.payload,
+                type_name=request.payload_type,
+                data_content_type=request.payload_format,
+            )
+            deserialize_time = time.perf_counter() - start
 
-        response_message = ResponseEvent(
-            request_id=request.request_id,
-            payload=serialized_result,
-            payload_type=result_type,
-            serialization_format=JSON_DATA_CONTENT_TYPE,
-            sender=rec_agent.id,
-            recipient=sender,
-            metadata=get_telemetry_grpc_metadata(),
-        )
-        await send.send(
-            topic=self._config.response_topic,
-            value=response_message,
-            key=request.request_id,
-            serializer=self._response_serializer,
-            headers={}
-        )
+            # Phase 3: Agent.on_message
+            message_context = MessageContext(
+                sender=sender,
+                topic_id=None,
+                is_rpc=True,
+                cancellation_token=CancellationToken(),
+                message_id=request_id,
+            )
+            start = time.perf_counter()
+            with MessageHandlerContext.populate_context(rec_agent.id):
+                with self._trace_helper.trace_block(
+                        "process",
+                        rec_agent.id,
+                        parent=request.metadata,
+                        attributes={"request_id": request_id},
+                        extraAttributes={"message_type": request.payload_type},
+                ):
+                    result = await rec_agent.on_message(message, ctx=message_context)
+            agent_time = time.perf_counter() - start
+
+            # Phase 4: Serialize
+            start = time.perf_counter()
+            result_type = self._serialization_registry.type_name(result)
+            serialized_result = self._serialization_registry.serialize(
+                result, type_name=result_type, data_content_type=JSON_DATA_CONTENT_TYPE
+            )
+            serialize_time = time.perf_counter() - start
+
+            # Phase 5: Send response
+            response_message = ResponseEvent(
+                request_id=request_id,
+                payload=serialized_result,
+                payload_type=result_type,
+                serialization_format=JSON_DATA_CONTENT_TYPE,
+                sender=rec_agent.id,
+                recipient=sender,
+                metadata=get_telemetry_grpc_metadata(),
+            )
+            start = time.perf_counter()
+            await send.send(
+                topic=self._config.response_topic,
+                value=response_message,
+                key=request_id,
+                serializer=self._response_serializer,
+                headers={}
+            )
+            send_time = time.perf_counter() - start
+
+            total_time = time.perf_counter() - start_total
+
+            logger.info(
+                f"[RequestMetrics] {request_id} processed in {total_time:.2f}s "
+                f"(lookup={agent_lookup_time:.3f}s, deserialize={deserialize_time:.3f}s, "
+                f"agent={agent_time:.3f}s, serialize={serialize_time:.3f}s, send={send_time:.3f}s)"
+            )
+
+            if total_time > 5.0:
+                logger.warning(f"[SLOW] Request {request_id} took {total_time:.2f}s")
+
+        except Exception as e:
+            logger.error(f"[RequestError] Failed to process {request_id}: {e}", exc_info=e)
+            response_message = ResponseEvent(
+                request_id=request_id,
+                error=str(e),
+                metadata=get_telemetry_grpc_metadata(),
+            )
+            try:
+                await send.send(
+                    topic=self._config.response_topic,
+                    value=response_message,
+                    key=request_id,
+                    serializer=self._response_serializer,
+                )
+            except Exception as e:
+                logger.error(f"[SendError] Failed to send error response for {request_id}: {e}", exc_info=e)

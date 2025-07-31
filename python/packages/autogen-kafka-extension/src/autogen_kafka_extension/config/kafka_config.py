@@ -340,10 +340,10 @@ class KafkaConfig(BaseConfig):
         """Return the configuration key for Kafka."""
         return 'kafka'
 
-    def get_consumer_config(self):
+    def get_consumer_config(self, topic: str) -> Dict[str, Any]:
         return {
-            "client.id": self.client_id,
-            "group.id": self.group_id,
+            "client.id": self.client_id + f"-{topic}",
+            "group.id": self.group_id + f"-{topic}",
             "auto.offset.reset": self.auto_offset_reset,
             "enable.auto.commit": self._enable_auto_commit,
             "bootstrap.servers": ",".join(self.bootstrap_servers),

@@ -40,13 +40,12 @@ class MessageProducer:
                 key=key,
                 value=serialized_value,
                 headers=headers)
-        )
+        , name=f"Send to topic {topic}")
 
     async def _send_async(self, topic, key, value, headers):
         self._producer.produce(
             topic=topic,
             key=key,
             value=value,
-            headers=headers,
-            callback=acked)
-        self._producer.poll(1)
+            headers=headers)
+        self._producer.flush()

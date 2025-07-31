@@ -164,7 +164,8 @@ class KafkaStreamingAgent(BaseAgent, StreamingWorkerBase[KafkaAgentConfig]):
                                              topic=self._config.request_topic,
                                              message=event,
                                              recipient=ctx.sender.__str__(),
-                                             serializer=self._serializer)
+                                             serializer=self._serializer),
+            name=f"Send request to topic {self._config.request_topic}"
         )
         
         # Return the future that will be resolved when response is received

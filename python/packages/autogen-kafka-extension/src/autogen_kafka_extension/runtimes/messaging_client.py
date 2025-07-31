@@ -173,7 +173,8 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
                     message = msg,
                     topic = self._config.request_topic,
                     recipient=recipient,
-                    serializer=self._request_serializer)
+                    serializer=self._request_serializer),
+                name=f"send_message_{request_id}"
             )
             return await future
 
@@ -233,7 +234,8 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
                     message=cloud_evt,
                     topic=self._config.publish_topic,
                     recipient=topic_id,
-                    serializer=self._cloud_event_serializer)
+                    serializer=self._cloud_event_serializer),
+                name=f"publish_message_{message_id}"
                 )
 
     async def _get_new_request_id(self) -> str:

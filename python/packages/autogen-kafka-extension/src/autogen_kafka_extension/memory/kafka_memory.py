@@ -100,7 +100,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
                 if offset == 0:
                     continue
                 partition = topic_partition.partition
-                self._offsets[partition] = offset
+                self._offsets[partition] = offset - 1
 
         except Exception as e:
             logger.error(f"Failed to get offset for topic {self._memory_topic}: {e}")
@@ -450,12 +450,15 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             producer (Send): The send object for publishing messages (unused in this implementation).
         """
         try:
-            if not self._initialized:
+            force_insert = not self._initialized
+            if force_insert:
                 if record.offset >= self._offsets.get(record.partition):
                     # Remove this offset from the offset map
                     del self._offsets[record.partition]
 
                 self._initialized = len(self._offsets) == 0
+                if self._initialized:
+                    logger.info(f"KafkaMemory initialized for session {self._session_id} with offsets: {self._offsets}")
 
             if record.value is None:
                 await self._handle_tombstone_record(record)
@@ -465,7 +468,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
                 logger.error(f"Unexpected record value type: {type(record.value)}")
                 return
 
-            await self._handle_memory_event(record.value)
+            await self._handle_memory_event(record.value, force_insert)
             
         except Exception as e:
             logger.error(f"Error handling Kafka event: {e}")
@@ -485,7 +488,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             logger.debug("Tombstone record from another worker, clearing memory")
             await self._memory.clear()
 
-    async def _handle_memory_event(self, event: MemoryEvent) -> None:
+    async def _handle_memory_event(self, event: MemoryEvent, force_insert: bool) -> None:
         """
         Handle memory events from other instances.
         
@@ -493,7 +496,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             event (MemoryEvent): The memory event to process.
         """
         # Skip events that we sent ourselves to avoid duplicate processing
-        if event.sender == self._instance_id:
+        if event.sender == self._instance_id and not force_insert:
             logger.debug(f"Skipping event from self: {event}")
             return
 

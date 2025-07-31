@@ -5,7 +5,7 @@ import aiorun
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.ui import Console
-from autogen_core.memory import MemoryQueryResult
+from autogen_core.memory import MemoryQueryResult, MemoryContent, MemoryMimeType
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from autogen_kafka_extension import KafkaMemory
@@ -34,15 +34,15 @@ class Application:
 
         result : MemoryQueryResult = await user_memory.query(query="The weather should be in metric units")
         if result and result.results and len(result.results) > 0:
-            logger.info(f"Memory query result: {result.content}")
+            logger.info(f"Memory query result: {result}")
         else:
             logger.info("No results found in memory.")
 
-        # Add user preferences to memory
-        # await user_memory.add(
-        #     MemoryContent(content="The weather should be in metric units", mime_type=MemoryMimeType.TEXT))
-        #
-        # await user_memory.add(MemoryContent(content="Meal recipe must be vegan", mime_type=MemoryMimeType.TEXT))
+            # Add user preferences to memory
+            await user_memory.add(
+                MemoryContent(content="The weather should be in metric units", mime_type=MemoryMimeType.TEXT))
+
+            await user_memory.add(MemoryContent(content="Meal recipe must be vegan", mime_type=MemoryMimeType.TEXT))
 
         async def get_weather(city: str, units: str = "imperial") -> str:
             if units == "imperial":

@@ -526,7 +526,8 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         """
         try:
             self._background_task_manager.add_task(
-                self._message_processor.process_request(record.value, producer)
+                self._message_processor.process_request(record.value, producer),
+                name=f"Process record {record.topic}-{record.partition}-{record.offset}"
             )
         except Exception as e:
             logger.error(f"Error processing record {record}: {e}")
