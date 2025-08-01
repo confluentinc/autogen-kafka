@@ -29,6 +29,7 @@ class BackgroundTaskManager:
         self._enable_logging = enable_logging
         self._active_task_count = 0
         self._task_lock = asyncio.Lock()
+        self._loop = asyncio.get_event_loop()
 
     def add_task(self, coro: Coroutine[Any, Any, Any], name: str = "unnamed") -> None:
         """Add a coroutine to be run as a background task with concurrency control."""

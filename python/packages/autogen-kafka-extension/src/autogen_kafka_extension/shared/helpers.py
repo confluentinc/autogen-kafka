@@ -1,6 +1,9 @@
 import asyncio
+import logging
+import time
 from typing import Union, Callable, Awaitable
 
+logger = logging.getLogger(__name__)
 
 class Helpers:
 
@@ -25,14 +28,27 @@ class Helpers:
             True if condition met within timeout, False otherwise.
         """
 
-        async def _check():
-            while True:
+        if timeout < 0:
+            raise ValueError("Timeout must be non-negative")
+        if check_interval <= 0:
+            raise ValueError("Check interval must be positive")
+
+        start_time = time.monotonic()
+
+        while True:
+            result = await check_func() if asyncio.iscoroutinefunction(check_func) else check_func()
+            if result == expected:
+                return True
+
+            elapsed = time.monotonic() - start_time
+            if elapsed >= timeout:
                 result = await check_func() if asyncio.iscoroutinefunction(check_func) else check_func()
                 if result == expected:
                     return True
-                await asyncio.sleep(check_interval)
+                else:
+                    logger.warning(
+                        f"Timeout waiting after {timeout}s. "
+                    )
+                    return False
 
-        try:
-            return await asyncio.wait_for(_check(), timeout)
-        except asyncio.TimeoutError:
-            return False
+            await asyncio.sleep(0.1)

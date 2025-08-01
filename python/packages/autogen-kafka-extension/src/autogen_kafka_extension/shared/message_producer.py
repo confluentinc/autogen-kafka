@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Any, Dict
 
@@ -20,6 +21,7 @@ class MessageProducer:
     def __init__(self, config):
         self._background_task_manager = BackgroundTaskManager()
         self._producer = Producer(config)
+        self._loop = asyncio.get_running_loop()
 
     async def send(self,
                    topic: str,
@@ -34,18 +36,16 @@ class MessageProducer:
             headers=headers
         )
 
-        self._background_task_manager.add_task(
-            self._send_async(
+        async def send_async():
+            self._producer.produce(
                 topic=topic,
                 key=key,
                 value=serialized_value,
-                headers=headers)
-        , name=f"Send to topic {topic}")
+                headers=headers,
+                on_delivery=acked
+            )
+            self._producer.flush()
 
-    async def _send_async(self, topic, key, value, headers):
-        self._producer.produce(
-            topic=topic,
-            key=key,
-            value=value,
-            headers=headers)
-        self._producer.flush()
+        self._background_task_manager.add_task(
+            coro = send_async(),
+            name=f"Send to topic {topic}")
