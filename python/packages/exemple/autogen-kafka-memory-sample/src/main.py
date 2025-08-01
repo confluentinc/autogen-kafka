@@ -8,7 +8,7 @@ from autogen_agentchat.ui import Console
 from autogen_core.memory import MemoryQueryResult, MemoryContent, MemoryMimeType
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
-from autogen_kafka_extension import KafkaMemory
+from autogen_kafka import KafkaMemory
 
 logger = logging.getLogger(__name__)
 

@@ -28,7 +28,6 @@ dependencies = [
     "grpcio>=1.70.0",
     "aiorun>=2025.1.1",
     "hatchling>=1.27.0",
-    "kstreams>=0.26.9",
     "ag2>=0.9",
 ]
 authors = [
