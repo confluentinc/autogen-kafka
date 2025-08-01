@@ -512,7 +512,7 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         async with self._pending_requests_lock:
             return uuid.uuid4().hex
 
-    async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, cr: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """Callback for processing incoming Kafka records.
         
         Processes incoming Kafka consumer records by routing them to the appropriate

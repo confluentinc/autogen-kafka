@@ -253,7 +253,7 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             serializer=self._subscription_serializer
         )
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """
         Process incoming subscription events from other service instances.
         

@@ -27,7 +27,7 @@ dependencies = [
     "autogen-ext[grpc]>=0.6.1",
     "aiorun>=2017.10.2",
     "grpcio>=1.70.0",
-    "autogen-kafka-extension",
+    "autogen-kafka",
     "autogen-agentchat>=0.6.1",
     "openai>=1.97.0",
 ]

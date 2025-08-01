@@ -19,7 +19,7 @@ class CloudEventProcessor(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
                          topic=config.publish_topic)
         self._message_processor = message_processor
 
-    async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, cr: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """Callback for processing incoming Kafka records.
 
         Processes incoming Kafka consumer records by routing them to the appropriate

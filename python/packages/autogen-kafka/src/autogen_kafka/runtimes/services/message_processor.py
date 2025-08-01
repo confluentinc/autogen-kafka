@@ -140,7 +140,7 @@ class MessageProcessor:
         except BaseException as e:
             logger.error("Error handling event", exc_info=e)
 
-    async def process_request(self, request: RequestEvent, send: Send) -> None:
+    async def process_request(self, request: RequestEvent, send: MessageProducer) -> None:
         """Process an incoming request message, invoke the agent, and send a response.
 
         This method handles direct agent-to-agent RPC requests by:
@@ -205,7 +205,7 @@ class MessageProcessor:
             except Exception as e:
                 logger.error(f"Failed to send response message: {e}")
 
-    async def _process_request(self, request: RequestEvent, send: Send) -> None:
+    async def _process_request(self, request: RequestEvent, send: MessageProducer) -> None:
 
         recipient = request.recipient
 

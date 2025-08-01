@@ -245,7 +245,7 @@ class MessagingClient(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
         async with self._pending_requests_lock:
             return uuid.uuid4().__str__()
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """Handle incoming response events from Kafka and resolve pending request futures.
         
         Args:
