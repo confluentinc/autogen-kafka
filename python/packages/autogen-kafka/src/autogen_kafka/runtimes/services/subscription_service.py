@@ -5,11 +5,13 @@ from autogen_core import Subscription, AgentId, TopicId
 from autogen_core._runtime_impl_helpers import SubscriptionManager
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper
-from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka import KafkaAgentRuntimeConfig
+from autogen_kafka.shared import MessageProducer
+from autogen_kafka.shared.consumer_record import ConsumerRecord
 from autogen_kafka.shared.events.events_serdes import EventSerializer
+from autogen_kafka.shared.stream import Stream
 from autogen_kafka.shared.streaming_service import StreamingService
 from autogen_kafka.shared.events.subscription_event import SubscriptionEvent, SubscriptionEvtOp
 from autogen_kafka.shared.streaming_worker_base import StreamingWorkerBase
@@ -251,7 +253,7 @@ class SubscriptionService(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             serializer=self._subscription_serializer
         )
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """
         Process incoming subscription events from other service instances.
         

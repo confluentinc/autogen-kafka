@@ -1,15 +1,17 @@
 import logging
-from typing import Dict, Union, Optional
+from typing import Dict, Union
 
 from autogen_core import AgentType
 from autogen_core._serialization import SerializationRegistry
 from autogen_core._telemetry import TraceHelper
-from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from ...config.agent_runtime_config import KafkaAgentRuntimeConfig
+from ...shared import MessageProducer
+from ...shared.consumer_record import ConsumerRecord
 from ...shared.events.events_serdes import EventSerializer
 from ...shared.events.registration_event import RegistrationEvent, RegistrationMessageType
+from ...shared.stream import Stream
 from ...shared.streaming_service import StreamingService
 from ...shared.streaming_worker_base import StreamingWorkerBase
 
@@ -182,14 +184,14 @@ class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             serializer=self._serializer
         )
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """
         Handle incoming registration messages from other workers.
         
         Args:
             record: The consumer record containing the registration message
             stream: The Kafka stream
-            send: The send function for producing messages
+            producer: The send function for producing messages
         """
         if not isinstance(record.value, RegistrationEvent):
             logger.error(f"Received invalid message type: {type(record.value)}")
@@ -200,15 +202,15 @@ class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
 
         try:
             if message.message_type == RegistrationMessageType.REGISTER:
-                self._handle_remote_registration(agent_key)
+                await self._handle_remote_registration(agent_key)
             elif message.message_type == RegistrationMessageType.UNREGISTER:
-                self._handle_remote_unregistration(agent_key)
+                await self._handle_remote_unregistration(agent_key)
             else:
                 logger.error(f"Unknown registration message type: {message.message_type}")
         except Exception as e:
             logger.error(f"Error processing registration message for agent {agent_key}: {e}")
 
-    def _handle_remote_registration(self, agent_key: str) -> None:
+    async def _handle_remote_registration(self, agent_key: str) -> None:
         """
         Handle registration message from another worker.
         
@@ -223,7 +225,7 @@ class AgentRegistry(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
             self._agents[agent_key] = agent_key
             logger.info(f"Registered remote agent: {agent_key}")
 
-    def _handle_remote_unregistration(self, agent_key: str) -> None:
+    async def _handle_remote_unregistration(self, agent_key: str) -> None:
         """
         Handle unregistration message from another worker.
         

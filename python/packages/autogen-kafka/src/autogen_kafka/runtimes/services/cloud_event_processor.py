@@ -1,10 +1,10 @@
 from azure.core.messaging import CloudEvent
-from kstreams import ConsumerRecord, Stream, Send
 
 from autogen_kafka import KafkaAgentRuntimeConfig
 from autogen_kafka.runtimes.services.message_processor import MessageProcessor
 from autogen_kafka.shared.streaming_worker_base import StreamingWorkerBase
-
+from autogen_kafka.shared.stream import ConsumerRecord, Stream
+from autogen_kafka.shared.message_producer import MessageProducer
 
 class CloudEventProcessor(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
     """
@@ -19,7 +19,7 @@ class CloudEventProcessor(StreamingWorkerBase[KafkaAgentRuntimeConfig]):
                          topic=config.publish_topic)
         self._message_processor = message_processor
 
-    async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, cr: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """Callback for processing incoming Kafka records.
 
         Processes incoming Kafka consumer records by routing them to the appropriate

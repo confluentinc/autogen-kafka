@@ -3,12 +3,9 @@
 import json
 import os
 import tempfile
-from pathlib import Path
 import pytest
 
 from autogen_kafka.config import KafkaMemoryConfig, SchemaRegistryConfig
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
-
 
 class TestKafkaMemoryConfig:
     """Test KafkaMemoryConfig loading from various sources."""
@@ -280,7 +277,7 @@ class TestKafkaMemoryConfigEnvironmentVariableParsing:
     
     def test_memory_section_parsing(self):
         """Test that MEMORY_* environment variables are correctly parsed."""
-        from autogen_kafka.config.config_loader import ConfigLoader
+        from autogen_kafka_extension.config.config_loader import ConfigLoader
         
         env_vars = {
             "TEST_PREFIX_NAME": "test-memory",

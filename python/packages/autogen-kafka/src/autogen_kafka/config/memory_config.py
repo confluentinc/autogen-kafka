@@ -3,9 +3,7 @@
 This module provides configuration classes specifically for Kafka-based memory
 management, including memory topic settings and persistence configuration.
 """
-from typing import Any, Dict, Optional
-
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
+from typing import Any, Dict
 
 from .service_base_config import ServiceBaseConfig  
 from .base_config import ValidationResult
@@ -39,10 +37,10 @@ class KafkaMemoryConfig(ServiceBaseConfig):
         num_partitions: int = 1,
         replication_factor: int = 1,
         is_compacted: bool = False,
-        security_protocol: Optional[SecurityProtocol] = None,
-        security_mechanism: Optional[SaslMechanism] = None,
-        sasl_plain_username: Optional[str] = None,
-        sasl_plain_password: Optional[str] = None,
+        security_protocol: str|None = None,
+        security_mechanism: str|None = None,
+        sasl_plain_username: str|None = None,
+        sasl_plain_password: str|None = None,
         memory_topic: str = "memory",
     ) -> None:
         """Initialize the Kafka memory configuration.
@@ -120,70 +118,36 @@ class KafkaMemoryConfig(ServiceBaseConfig):
             ValueError: If required parameters are missing or invalid.
         """
         # Extract required parameters
-        name = data.get('name')
-        if not name:
-            raise ValueError("'name' is required in configuration")
-            
-        group_id = data.get('group_id')
-        if not group_id:
-            raise ValueError("'group_id' is required in configuration")
-            
-        client_id = data.get('client_id')
-        if not client_id:
-            raise ValueError("'client_id' is required in configuration")
-        
-        # Handle bootstrap_servers - can be string or list
-        bootstrap_servers = data.get('bootstrap_servers')
-        if not bootstrap_servers:
-            raise ValueError("'bootstrap_servers' is required in configuration")
-        
-        if isinstance(bootstrap_servers, str):
-            bootstrap_servers = [server.strip() for server in bootstrap_servers.split(',')]
-        
-        # Create schema registry config
-        schema_registry_data = data.get(SchemaRegistryConfig.config_key(), {})
-        if not schema_registry_data.get('url'):
-            raise ValueError(f"'{SchemaRegistryConfig.config_key()}.url' is required in configuration")
-            
-        schema_registry_config = SchemaRegistryConfig.from_dict(schema_registry_data)
-        
+        kafka_data = data.get(KafkaConfig.config_key(), {})
+        if not kafka_data:
+            raise ValueError(f"'{KafkaConfig.config_key()}' configuration is required")
+
+        # If schema_registry is at the top level (from environment variables),
+        # move it into the kafka_data
+        if 'schema_registry' in data and 'schema_registry' not in kafka_data:
+            kafka_data['schema_registry'] = data['schema_registry']
+
+        kafka_config = KafkaConfig.from_dict(kafka_data)
+
         # Extract memory-specific configuration
         memory_data = data.get('memory', {})
         memory_topic = memory_data.get('memory_topic', 'memory')
         
-        # Extract optional parameters with memory-specific defaults
-        num_partitions = data.get('num_partitions', 1)  # Memory should have single partition
-        replication_factor = data.get('replication_factor', 3)
-        is_compacted = data.get('is_compacted', False)  # Memory should not be compacted
-        auto_offset_reset = data.get('auto_offset_reset', 'earliest')  # Memory should start from beginning
-        
-        # Handle security settings
-        security_protocol = None
-        if data.get('security_protocol'):
-            security_protocol = SecurityProtocol(data['security_protocol'])
-            
-        security_mechanism = None
-        if data.get('security_mechanism'):
-            security_mechanism = SaslMechanism(data['security_mechanism'])
-        
-        sasl_plain_username = data.get('sasl_plain_username')
-        sasl_plain_password = data.get('sasl_plain_password')
-        
         return cls(
-            name=name,
-            group_id=group_id,
-            client_id=client_id,
-            bootstrap_servers=bootstrap_servers,
-            schema_registry_config=schema_registry_config,
+            name=kafka_config.name,
+            group_id=kafka_config.group_id,
+            client_id=kafka_config.client_id,
+            bootstrap_servers=kafka_config.bootstrap_servers,
+            schema_registry_config=kafka_config.schema_registry_config,
             memory_topic=memory_topic,
-            num_partitions=num_partitions,
-            replication_factor=replication_factor,
-            is_compacted=is_compacted,
-            auto_offset_reset=auto_offset_reset,
-            security_protocol=security_protocol,
-            security_mechanism=security_mechanism,
-            sasl_plain_username=sasl_plain_username,
-            sasl_plain_password=sasl_plain_password
+            num_partitions=kafka_config.num_partitions,
+            replication_factor=kafka_config.replication_factor,
+            is_compacted=kafka_config.is_compacted,
+            auto_offset_reset="earliest",  # Memory should always start from the earliest
+            security_protocol=kafka_config.security_protocol,
+            security_mechanism=kafka_config.security_mechanism,
+            sasl_plain_username=kafka_config.sasl_plain_username,
+            sasl_plain_password=kafka_config.sasl_plain_password
         )
     
     def _validate_impl(self) -> ValidationResult:

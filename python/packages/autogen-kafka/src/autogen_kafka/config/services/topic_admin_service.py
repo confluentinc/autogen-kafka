@@ -1,14 +1,13 @@
 import logging
-from typing import Any, Optional
+from typing import Any, Dict
 
-from confluent_kafka import KafkaException, KafkaError
-from confluent_kafka.admin import ClusterMetadata, AdminClient
+from confluent_kafka import KafkaException, KafkaError, TopicPartition
+from confluent_kafka.admin import ClusterMetadata, AdminClient, OffsetSpec, ListOffsetsResultInfo
 from confluent_kafka.cimpl import NewTopic
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 logger = logging.getLogger(__name__)
 
-def _handle_topic_creation_result(futures: dict, topic_names: list[str]) -> None:
+async def _handle_topic_creation_result(futures: dict, topic_names: list[str]) -> None:
     """Handle the results of topic creation futures.
 
     This private method processes the Future objects returned by the Kafka admin
@@ -79,8 +78,8 @@ class TopicAdminService:
                  num_partitions: int = 3,
                  replication_factor: int = 1,
                  is_compacted: bool = False,
-                 security_protocol: SecurityProtocol | None = None,
-                 security_mechanism: SaslMechanism | None = None,
+                 security_protocol: str | None = None,
+                 security_mechanism: str | None = None,
                  sasl_plain_username: str | None = None,
                  sasl_plain_password: str | None = None,
                  ) -> None:
@@ -127,13 +126,57 @@ class TopicAdminService:
                 f"({len(cluster_info.nodes)}). Using {self._replication_factor} instead."
             )
 
+    def get_offset_for_topic(self, topic_name: str) -> Dict[TopicPartition, ListOffsetsResultInfo]:
+        """Get the current offset for a specific topic.
+
+        Retrieves the latest offset for the specified topic. This is useful for
+        understanding the current position in the topic's partition(s).
+
+        Args:
+            topic_name: The name of the Kafka topic to get the offset for.
+
+        Returns:
+            int: The latest offset for the specified topic.
+
+        Raises:
+            KafkaException: If unable to retrieve offsets due to Kafka-related errors
+                           such as broker connectivity issues or insufficient permissions
+            Exception: For any other unexpected errors during offset retrieval
+        """
+        metadata = self._admin_client.list_topics()
+        if topic_name not in metadata.topics:
+            raise KafkaException(f"Topic {topic_name} does not exist")
+
+        partitions = metadata.topics[topic_name].partitions
+        if not partitions:
+            return {}
+
+        topic_partitions : Dict[TopicPartition, OffsetSpec] = {}
+        for index in partitions:
+            partition = partitions[index]
+            partition_id = partition.id
+            topic_partition = TopicPartition(topic_name, partition_id)
+            topic_partitions[topic_partition] = OffsetSpec.latest()
+
+        offsets : Dict[TopicPartition, ListOffsetsResultInfo] = {}
+
+        # Create a list of TopicPartition objects for the topic
+        offsets_future = self._admin_client.list_offsets(topic_partitions)
+        for offset_future in offsets_future:
+            future = offsets_future[offset_future]
+            result : ListOffsetsResultInfo = future.result()
+            topic_partition : TopicPartition = TopicPartition(topic= topic_name, partition=offset_future.partition)
+            offsets[topic_partition] = result
+
+        return offsets
+
     @staticmethod
     def _get_admin_client(bootstrap_servers: list[str],
                           *,
-                          security_protocol: Optional[SecurityProtocol] = None,
-                          security_mechanism: Optional[SaslMechanism] = None,
-                          sasl_plain_username: Optional[str] = None,
-                          sasl_plain_password: Optional[str] = None,
+                          security_protocol: str | None = None,
+                          security_mechanism: str | None = None,
+                          sasl_plain_username: str | None = None,
+                          sasl_plain_password: str | None = None,
                           ) -> AdminClient:
         """Create and configure a Kafka AdminClient for administrative operations.
 
@@ -161,14 +204,14 @@ class TopicAdminService:
             'client.id': 'autogen-kafka-extension',
             'group.id': 'autogen-kafka-extension-group',
             'security.protocol': (
-                security_protocol.value
+                security_protocol
                 if security_protocol
-                else SecurityProtocol.PLAINTEXT.value
+                else "PLAINTEXT"  # Default to PLAINTEXT if not specified
             ),
             'sasl.mechanism': (
-                security_mechanism.value
+                security_mechanism
                 if security_mechanism
-                else SaslMechanism.PLAIN.value
+                else "PLAIN"  # Default to PLAIN if not specified
             ),
         }
 
@@ -207,7 +250,7 @@ class TopicAdminService:
             }
         )
 
-    def create_topic(self, topic_name: str) -> None:
+    async def create_topic(self, topic_name: str) -> None:
         """Create a single Kafka topic.
         
         Creates a new Kafka topic with the specified name using the partition count
@@ -238,13 +281,13 @@ class TopicAdminService:
         
         try:
             futures = self._admin_client.create_topics([new_topic])
-            _handle_topic_creation_result(futures, [topic_name])
+            await _handle_topic_creation_result(futures, [topic_name])
             logger.info(f"Successfully processed topic creation for: {topic_name}")
         except Exception:
             # Re-raise the exception as it's already logged in _handle_topic_creation_result
             raise
 
-    def create_topics(self, topic_names: list[str]) -> None:
+    async def create_topics(self, topic_names: list[str]) -> None:
         """Create multiple Kafka topics.
         
         Creates multiple Kafka topics in a single batch operation using the partition
@@ -284,7 +327,7 @@ class TopicAdminService:
         
         try:
             futures = self._admin_client.create_topics(new_topics)
-            _handle_topic_creation_result(futures, topic_names)
+            await _handle_topic_creation_result(futures, topic_names)
             logger.info(f"Successfully processed topic creation for: {topic_names}")
         except Exception:
             # Re-raise the exception as it's already logged in _handle_topic_creation_result

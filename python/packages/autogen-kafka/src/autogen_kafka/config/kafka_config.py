@@ -4,11 +4,7 @@ This module provides the main Kafka configuration class that combines
 connection settings, schema registry configuration, and administrative
 capabilities in a consolidated interface.
 """
-
 from typing import Optional
-from aiokafka.helpers import create_ssl_context
-from kstreams.backends import Kafka
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 
 from .schema_registry_config import SchemaRegistryConfig
 from .base_config import BaseConfig, ValidationResult
@@ -42,10 +38,11 @@ class KafkaConfig(BaseConfig):
         replication_factor: int = 1,
         is_compacted: bool = False,
         auto_offset_reset: str = 'latest',
-        security_protocol: SecurityProtocol | None = None,
-        security_mechanism: SaslMechanism | None = None,
+        security_protocol: str = "PLAINTEXT",
+        security_mechanism: str = "PLAIN",
         sasl_plain_username: str | None = None,
         sasl_plain_password: str | None = None,
+        enable_auto_commit: bool = True,
     ) -> None:
         """Initialize the Kafka configuration.
         
@@ -85,6 +82,7 @@ class KafkaConfig(BaseConfig):
         self._replication_factor = replication_factor
         self._is_compacted = is_compacted
         self._auto_offset_reset = auto_offset_reset
+        self._enable_auto_commit = enable_auto_commit
 
         # Lazy initialization for services
         self._utils : KafkaUtils | None = None
@@ -139,12 +137,12 @@ class KafkaConfig(BaseConfig):
         return self._bootstrap_servers.copy()
 
     @property
-    def security_protocol(self) -> Optional[SecurityProtocol]:
+    def security_protocol(self) -> str:
         """Get the security protocol."""
         return self._security_protocol
 
     @property
-    def security_mechanism(self) -> Optional[SaslMechanism]:
+    def security_mechanism(self) -> str:
         """Get the SASL mechanism."""
         return self._security_mechanism
 
@@ -172,28 +170,6 @@ class KafkaConfig(BaseConfig):
 
         return self._utils
 
-    def get_kafka_backend(self) -> Kafka:
-        """Create and configure a Kafka backend instance for streaming operations.
-        
-        This method creates a kstreams Kafka backend configured with all the
-        security and connection settings from this configuration. The backend
-        can be used for creating producers, consumers, and streaming applications.
-        
-        Returns:
-            A configured Kafka backend instance ready for streaming operations.
-            
-        Note:
-            The SSL context is automatically created if security protocols require it.
-        """
-        return Kafka(
-            bootstrap_servers=self._bootstrap_servers,
-            security_protocol=self._security_protocol or SecurityProtocol.PLAINTEXT,
-            sasl_mechanism=self._security_mechanism or SaslMechanism.PLAIN,
-            sasl_plain_username=self._sasl_plain_username,
-            sasl_plain_password=self._sasl_plain_password,
-            ssl_context=create_ssl_context(),
-        )
-
     def _validate_impl(self) -> ValidationResult:
         """Validate the Kafka configuration parameters."""
         errors = []
@@ -215,8 +191,8 @@ class KafkaConfig(BaseConfig):
                 errors.append(f"Invalid bootstrap server format: {server}")
 
         # Validate SASL authentication requirements
-        if self._security_protocol and self._security_protocol != SecurityProtocol.PLAINTEXT:
-            if self._security_mechanism == SaslMechanism.PLAIN:
+        if self._security_protocol and self._security_protocol != "PLAINTEXT":
+            if self._security_mechanism == "PLAIN":
                 if not self._sasl_plain_username or not self._sasl_plain_password:
                     errors.append("SASL PLAIN authentication requires both username and password")
 
@@ -251,7 +227,7 @@ class KafkaConfig(BaseConfig):
         if self._num_partitions == 1:
             warnings.append("Single partition may limit throughput")
         
-        if self._security_protocol == SecurityProtocol.PLAINTEXT:
+        if self._security_protocol == "PLAINTEXT":
             warnings.append("Using PLAINTEXT security protocol - consider using SSL/SASL for production")
 
         return ValidationResult(
@@ -330,11 +306,15 @@ class KafkaConfig(BaseConfig):
         # Handle security settings
         security_protocol = None
         if data.get('security_protocol'):
-            security_protocol = SecurityProtocol(data['security_protocol'])
+            security_protocol = data['security_protocol']
+        else:
+            security_protocol = "PLAINTEXT"
             
         security_mechanism = None
         if data.get('security_mechanism'):
-            security_mechanism = SaslMechanism(data['security_mechanism'])
+            security_mechanism = data['security_mechanism']
+        else:
+            security_mechanism = "PLAIN"
         
         sasl_plain_username = data.get('sasl_plain_username')
         sasl_plain_password = data.get('sasl_plain_password')
@@ -359,3 +339,26 @@ class KafkaConfig(BaseConfig):
     def config_key():
         """Return the configuration key for Kafka."""
         return 'kafka'
+
+    def get_consumer_config(self, topic: str) -> Dict[str, Any]:
+        return {
+            "client.id": self.client_id + f"-{topic}",
+            "group.id": self.group_id + f"-{topic}",
+            "auto.offset.reset": self.auto_offset_reset,
+            "enable.auto.commit": self._enable_auto_commit,
+            "bootstrap.servers": ",".join(self.bootstrap_servers),
+            "security.protocol": self.security_protocol if self.security_protocol else None,
+            "sasl.mechanism": self.security_mechanism if self.security_mechanism else None,
+            "sasl.username": self.sasl_plain_username,
+            "sasl.password": self.sasl_plain_password
+        }
+
+    def get_producer_config(self):
+        return {
+            "client.id": self.client_id,
+            "bootstrap.servers": ",".join(self.bootstrap_servers),
+            "security.protocol": self.security_protocol if self.security_protocol else None,
+            "sasl.mechanism": self.security_mechanism if self.security_mechanism else None,
+            "sasl.username": self.sasl_plain_username,
+            "sasl.password": self.sasl_plain_password
+        }

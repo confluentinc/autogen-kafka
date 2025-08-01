@@ -1,16 +1,18 @@
 import asyncio
 import logging
 import uuid
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 
 from autogen_core import CancellationToken
 from autogen_core.memory import Memory, UpdateContextResult, MemoryContent, MemoryQueryResult, ListMemory
 from autogen_core.model_context import ChatCompletionContext
-from kstreams import Stream, Send, ConsumerRecord
 
 from ..config.services.kafka_utils import KafkaUtils
 from ..config.memory_config import KafkaMemoryConfig
+from ..shared import MessageProducer
 from ..shared.events.events_serdes import EventSerializer
+from ..shared.helpers import Helpers
+from ..shared.stream import ConsumerRecord, Stream
 from ..shared.streaming_worker_base import StreamingWorkerBase
 from ..shared.events.memory_event import MemoryEvent
 
@@ -55,7 +57,8 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
                  config: KafkaMemoryConfig,
                  session_id: str,
                  *,
-                 memory: Memory | None = None) -> None:
+                 memory: Memory | None = None,
+                 instance_id: str | None = None) -> None:
         """
         Initialize a KafkaMemory instance.
         
@@ -71,12 +74,15 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         self._session_id = session_id
         self._memory_topic = self._create_topic_name(config.memory_topic, session_id)
         self._memory = memory or ListMemory()
-        self._instance_id = str(uuid.uuid4())
+        self._instance_id = instance_id or str(uuid.uuid4())
         self._serializer = EventSerializer(
             topic=self._memory_topic,
             source_type=MemoryEvent,
             kafka_utils=config.kafka_config.utils()
         )
+
+        # Create topic
+        config.kafka_config.utils().create_topic(self._memory_topic)
 
         # Initialize the streaming worker base with the memory topic
         StreamingWorkerBase.__init__(
@@ -84,6 +90,51 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             config=config,
             topic=self._memory_topic,
             target_type=MemoryEvent)
+
+        try:
+            offsets = config.kafka_config.utils().get_offset_for_topic(self._memory_topic)
+
+            self._offsets : Dict[int, int] = {}
+            for topic_partition in offsets:
+                offset = offsets[topic_partition].offset
+                if offset == 0:
+                    continue
+                partition = topic_partition.partition
+                self._offsets[partition] = offset - 1
+
+        except Exception as e:
+            logger.error(f"Failed to get offset for topic {self._memory_topic}: {e}")
+            raise KafkaMemoryError(f"Failed to get offset for topic {self._memory_topic}: {e}") from e
+
+        self._initialized = len(self._offsets) == 0
+
+    async def start_and_wait_for(self, timeout : int = 30):
+        """
+        Start the Kafka stream processing engine and wait for background tasks to start.
+        :param timeout: The timeout in seconds.
+
+        Initializes and starts all internal services in the correct order:
+        1. Subscription service for managing agent subscriptions
+        2. Messaging client for sending/receiving messages
+        3. Agent registry for agent discovery and management
+        4. Underlying streaming service for Kafka connectivity
+        5. Wait for all background tasks to start.
+
+        This method is idempotent - calling it multiple times has no additional effect.
+        """
+        if self.is_started:
+            return
+
+        await self.start()
+        await self.wait_for_streams_to_start(timeout=timeout)
+        await Helpers.wait_for_condition(check_func=self._is_initialized, timeout=timeout, check_interval=0.1)
+
+    async def _is_initialized(self) -> bool :
+        """
+        Check if the KafkaMemory instance is fully initialized and ready.
+        :return: true if all offsets are zero, indicating that all messages have been processed.
+        """
+        return self._initialized
 
     @property
     def memory_topic(self) -> str:
@@ -384,7 +435,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         
         logger.info(f"Topic {self.memory_topic} successfully deleted after {retries} attempts")
 
-    async def _handle_event(self, record: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, record: ConsumerRecord, stream: Stream, producer: MessageProducer) -> None:
         """
         Handle incoming Kafka events for memory synchronization.
         
@@ -396,9 +447,19 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
         Args:
             record (ConsumerRecord): The Kafka consumer record containing the event.
             stream (Stream): The Kafka stream object (unused in this implementation).
-            send (Send): The send object for publishing messages (unused in this implementation).
+            producer (Send): The send object for publishing messages (unused in this implementation).
         """
         try:
+            force_insert = not self._initialized
+            if force_insert:
+                if record.offset >= self._offsets.get(record.partition):
+                    # Remove this offset from the offset map
+                    del self._offsets[record.partition]
+
+                self._initialized = len(self._offsets) == 0
+                if self._initialized:
+                    logger.info(f"KafkaMemory initialized for session {self._session_id} with offsets: {self._offsets}")
+
             if record.value is None:
                 await self._handle_tombstone_record(record)
                 return
@@ -407,7 +468,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
                 logger.error(f"Unexpected record value type: {type(record.value)}")
                 return
 
-            await self._handle_memory_event(record.value)
+            await self._handle_memory_event(record.value, force_insert)
             
         except Exception as e:
             logger.error(f"Error handling Kafka event: {e}")
@@ -427,7 +488,7 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             logger.debug("Tombstone record from another worker, clearing memory")
             await self._memory.clear()
 
-    async def _handle_memory_event(self, event: MemoryEvent) -> None:
+    async def _handle_memory_event(self, event: MemoryEvent, force_insert: bool) -> None:
         """
         Handle memory events from other instances.
         
@@ -435,10 +496,29 @@ class KafkaMemory(Memory, StreamingWorkerBase[KafkaMemoryConfig]):
             event (MemoryEvent): The memory event to process.
         """
         # Skip events that we sent ourselves to avoid duplicate processing
-        if event.sender == self._instance_id:
+        if event.sender == self._instance_id and not force_insert:
             logger.debug(f"Skipping event from self: {event}")
             return
 
         # Add the content from other instances to our local memory
         logger.debug(f"Adding content from instance {event.sender}")
         await self._memory.add(event.memory_content)
+
+    @classmethod
+    def create_from_file(cls, filename: str,
+                         session_id: str = uuid.uuid4().__str__(),
+                         *,
+                         instance_id : str | None = None) -> "KafkaMemory":
+        """
+        Create a KafkaMemory instance from a configuration file.
+
+        Args:
+            filename (str): Path to the configuration file.
+            session_id (str): Unique session ID for this memory instance.
+            instance_id (str): Unique instance ID for this memory instance. Defaults to a random UUID.
+
+        Returns:
+            KafkaMemory: An instance of KafkaMemory initialized with the provided configuration.
+        """
+        config = KafkaMemoryConfig.from_file(filename)
+        return cls(config=config, session_id=session_id, instance_id=instance_id)

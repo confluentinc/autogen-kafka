@@ -5,13 +5,12 @@ import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
 from autogen_core import MessageContext, JSON_DATA_CONTENT_TYPE
-from kstreams import ConsumerRecord, Stream, Send
 from pydantic import BaseModel
 
 from autogen_kafka import KafkaAgentConfig
 from autogen_kafka.agent.kafka_streaming_agent import KafkaStreamingAgent
 from autogen_kafka.agent.event.agent_event import AgentEvent
-
+from autogen_kafka.shared.streaming_service import ConsumerRecord, Stream, Send
 
 @dataclass
 class Request(BaseModel):
@@ -380,7 +379,7 @@ class TestKafkaStreamingAgent:
     def test_inheritance(self, agent):
         """Test that KafkaStreamingAgent properly inherits from BaseAgent and StreamingWorkerBase."""
         from autogen_core import BaseAgent
-        from autogen_kafka.shared.streaming_worker_base import StreamingWorkerBase
+        from autogen_kafka_extension.shared.streaming_worker_base import StreamingWorkerBase
         
         assert isinstance(agent, BaseAgent)
         assert isinstance(agent, StreamingWorkerBase)

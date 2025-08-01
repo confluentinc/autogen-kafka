@@ -8,7 +8,6 @@ from autogen_core import (
     AgentRuntime, Agent, AgentId, Subscription, TopicId, CancellationToken,
     AgentType, AgentMetadata, MessageSerializer,
 )
-from kstreams import ConsumerRecord, Stream, Send
 from opentelemetry.trace import TracerProvider
 
 from autogen_kafka import KafkaAgentRuntimeConfig
@@ -16,7 +15,9 @@ from autogen_kafka.runtimes.messaging_client import MessagingClient
 from autogen_kafka.runtimes.services.agent_registry import AgentRegistry
 from autogen_kafka.runtimes.services.agent_manager import AgentManager
 from autogen_kafka.runtimes.services.cloud_event_processor import CloudEventProcessor
+from autogen_kafka.shared import MessageProducer
 from autogen_kafka.shared.events.request_event import RequestEvent
+from autogen_kafka.shared.stream import ConsumerRecord, Stream
 from autogen_kafka.shared.streaming_worker_base import StreamingWorkerBase
 from autogen_kafka.runtimes.services.message_processor import MessageProcessor
 from autogen_kafka.runtimes.services.subscription_service import SubscriptionService
@@ -511,7 +512,7 @@ class KafkaAgentRuntime(StreamingWorkerBase[KafkaAgentRuntimeConfig], AgentRunti
         async with self._pending_requests_lock:
             return uuid.uuid4().hex
 
-    async def _handle_event(self, cr: ConsumerRecord, stream: Stream, send: Send) -> None:
+    async def handle_event(self, cr: ConsumerRecord, stream: Stream, send: MessageProducer) -> None:
         """Callback for processing incoming Kafka records.
         
         Processes incoming Kafka consumer records by routing them to the appropriate

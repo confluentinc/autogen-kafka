@@ -53,28 +53,7 @@ class StreamingServiceConfig:
             raise ValueError(
                 "auto_offset_reset must be one of: 'earliest', 'latest', 'none'"
             )
-    
-    def get_consumer_config(self) -> Dict[str, Any]:
-        """Get the Kafka consumer configuration dictionary.
-        
-        This method generates a complete consumer configuration dictionary suitable
-        for use with Kafka consumers. It includes all the necessary settings for
-        consumer behavior and identification.
-        
-        Returns:
-            A dictionary containing the consumer configuration with:
-            - client_id: Client identifier for this consumer
-            - group_id: Consumer group identifier
-            - auto_offset_reset: Strategy for offset reset behavior
-            - enable_auto_commit: Auto-commit configuration
-        """
-        return {
-            "client_id": self.client_id,
-            "group_id": self.group_id,
-            "auto_offset_reset": self.auto_offset_reset,
-            "enable_auto_commit": self.enable_auto_commit,
-        }
-    
+
     def to_dict(self) -> Dict[str, Any]:
         """Convert configuration to a dictionary representation.
         

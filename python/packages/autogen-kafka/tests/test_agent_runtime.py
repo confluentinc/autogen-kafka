@@ -4,7 +4,6 @@ from typing import List
 import pytest
 from autogen_core import try_get_known_serializers_for_type, AgentType, AgentId, TopicId, TypeSubscription, \
     Subscription, DefaultTopicId
-from kstreams.backends.kafka import SecurityProtocol, SaslMechanism
 from testcontainers.core.container import DockerContainer
 from testcontainers.core.network import Network
 from testcontainers.core.waiting_utils import wait_for_logs
@@ -86,8 +85,8 @@ def create_worker_config(
     return KafkaAgentRuntimeConfig(
         kafka_config=KafkaConfig(
             name=name + f"_{group_suffix}_{client_suffix}",
-            security_protocol=SecurityProtocol.PLAINTEXT,
-            security_mechanism=SaslMechanism.PLAIN,
+            security_protocol="PLAINTEXT",
+            security_mechanism="PLAIN",
             bootstrap_servers=[connection],
             group_id=f"{AUTOGEN_GROUP_PREFIX}_{group_suffix}",
             client_id=f"{AUTOGEN_CLIENT_PREFIX}_{client_suffix}",
