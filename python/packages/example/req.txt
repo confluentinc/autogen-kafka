@@ -1,0 +1,9 @@
+autogen>=0.6.1
+autogen-core>=0.6.1
+kstreams>=0.26.9
+confluent-kafka>=2.10.1
+confluent-kafka[avro,json,protobuf]>=2.10.1
+azure-core>=1.34.0
+autogen-ext[grpc]>=0.6.1
+aiorun>=2017.10.2
+grpcio>=1.70.0
